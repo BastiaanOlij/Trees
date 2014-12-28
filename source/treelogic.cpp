@@ -297,7 +297,7 @@ bool treelogic::doIteration(float pMaxDistance, float pBranchSize, float pCutOff
 		float currentDistance = delta.length();
 		
 		// as our vertices haven't moved we only need to check any new vertices
-		for (v = point.closestVertice + 1; v < mVertices.size(); v++) {
+		for (v = mLastNumOfVerts; v < mVertices.size(); v++) {
 			delta = mVertices[v] - point.position;
 			float distance = delta.length();
 			if (distance < currentDistance) {
