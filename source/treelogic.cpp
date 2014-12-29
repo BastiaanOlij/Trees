@@ -11,90 +11,6 @@
 #include "treelogic.h"
 
 /////////////////////////////////////////////////////////////////////
-// class for our vector
-/////////////////////////////////////////////////////////////////////
-
-vec3::vec3(){
-	x = 0;
-	y = 0;
-	z = 0;	
-};
-
-vec3::vec3(float pX, float pY, float pZ) {
-	x = pX;
-	y = pY;
-	z = pZ;	
-};
-
-vec3::vec3(const vec3& pCopy) {
-	x = pCopy.x;
-	y = pCopy.y;
-	z = pCopy.z;
-};
-
-float vec3::length() {
-	float l = (x * x) + (y * y) + (z * z);
-	if (l==0.0f) {
-		return 0.0f;
-	} else {
-		return sqrt(l);
-	};
-};
-
-vec3 vec3::normalize() {
-	float l = length();
-	if (l == 0.0f) {
-		return vec3(0.0f, 1.0f, 0.0f);
-	} else {
-		return vec3(x / l, y / l, z / l);
-	};
-};
-
-vec3& vec3::operator=(const vec3 &pCopy) {
-	x = pCopy.x;
-	y = pCopy.y;
-	z = pCopy.z;
-	return (*this);
-};
-
-vec3& vec3::operator+=(const vec3& pAdd) {
-	x += pAdd.x;
-	y += pAdd.y;
-	z += pAdd.z;
-	return (*this);
-};
-
-vec3& vec3::operator-=(const vec3& pSub) {
-	x -= pSub.x;
-	y -= pSub.y;
-	z -= pSub.z;
-	return (*this);	
-};
-
-vec3& vec3::operator*=(float pMult) {
-	x *= pMult;
-	y *= pMult;
-	z *= pMult;
-	return (*this);
-};
-
-vec3& vec3::operator/=(float pDiv) {
-	if (pDiv == 0.0) {
-		// divide by 0, really should throw an exception error
-		return (*this);			
-	} else if (pDiv == 1.0) {
-		// don't waste the time...
-		return (*this);			
-	};
-	
-	x /= pDiv;
-	y /= pDiv;
-	z /= pDiv;
-	
-	return (*this);	
-};
-
-/////////////////////////////////////////////////////////////////////
 // class for our attraction points
 /////////////////////////////////////////////////////////////////////
 
@@ -135,21 +51,29 @@ attractionPoint& attractionPoint::operator=(const attractionPoint& pCopy) {
 treenode::treenode() {
 	a = 0;
 	b = 0;
+	parent = -1;
+	childcount = 0;
 };
 
-treenode::treenode(unsigned int pA, unsigned int pB) {
+treenode::treenode(unsigned int pA, unsigned int pB, int pParent) {
 	a = pA;
 	b = pB;
+	parent = pParent;
+	childcount = 0;
 };
 
 treenode::treenode(const treenode& pCopy) {
 	a = pCopy.a;
 	b = pCopy.b;
+	parent = pCopy.parent;
+	childcount = pCopy.childcount;
 };
 
 treenode& treenode::operator=(const treenode& pCopy) {
 	a = pCopy.a;
 	b = pCopy.b;
+	parent = pCopy.parent;
+	childcount = pCopy.childcount;
 	return (*this);
 };
 
@@ -211,11 +135,41 @@ float treelogic::randf(float pMin, float pMax) {
  *
  **/
 unsigned int treelogic::growBranch(unsigned int pFromVertex, vec3 pTo) {
+	int	parent = -1;
+	
+	// Find our parent
+	for (unsigned int p = 0; p < mNodes.size() && parent == -1; p++) {
+		if (mNodes[p].b == pFromVertex) {
+			parent = p;
+		};
+	};
+	
+	if (parent != -1) {
+		// check our vector from our parent
+		vec3 parentVector = mVertices[mNodes[parent].b] - mVertices[mNodes[parent].a];
+		parentVector = parentVector.normalized();
+		
+		vec3 toVector = pTo - mVertices[mNodes[parent].b];
+		toVector = toVector.normalized();
+		
+		// check if we're backtracking, this can happen if we're "trapped" between two equal distanced but opposite attraction points
+		if ((parentVector % toVector) < -0.8) {
+			// use a cross product of the two vectors 
+			pTo = mVertices[mNodes[parent].b] + (parentVector * toVector);
+		};		
+	};
+	
 	// add our new vertice
 	mVertices.push_back(pTo);
 	
 	// add our node
-	mNodes.push_back(treenode(pFromVertex, mVertices.size()-1));
+	mNodes.push_back(treenode(pFromVertex, mVertices.size()-1, parent));
+	
+	// now update our count
+	while (parent != -1) {
+		mNodes[parent].childcount++;
+		parent = mNodes[parent].parent;
+	};
 	
 	return mVertices.size()-1;
 };
@@ -252,7 +206,7 @@ void treelogic::generateAttractionPoints(unsigned int pNumOfPoints, float pOuter
 		point.x = randf();
 		point.y = randf(0.0f, 1.0f);
 		point.z = randf();		
-		point = point.normalize();
+		point = point.normalized();
 		
 		// Scale it up to a random radius and stretch if needed
 		point *= ((pOuterRadius - pInnerRadius) * randf(0.0f, 1.0f)) + pInnerRadius;
@@ -318,7 +272,7 @@ bool treelogic::doIteration(float pMaxDistance, float pBranchSize, float pCutOff
 				// count our vertice
 				numOfAPoints[point.closestVertice] += 1.0;
 				vec3 norm = mAttractionPoints[i].position - mVertices[point.closestVertice];
-				directions[point.closestVertice] += norm.normalize();				
+				directions[point.closestVertice] += norm.normalized();				
 			};
 			
 			// and advance
@@ -334,7 +288,7 @@ bool treelogic::doIteration(float pMaxDistance, float pBranchSize, float pCutOff
 		if (numOfAPoints[v] > 0.0) {
 			vec3	vert = mVertices[v];
 			directions[v] /= numOfAPoints[v];
-			directions[v] = directions[v].normalize() * pBranchSize;				
+			directions[v] = directions[v].normalized() * pBranchSize;				
 			vert += directions[v] + pBias;
 			
 			growBranch(v, vert);			
@@ -345,6 +299,71 @@ bool treelogic::doIteration(float pMaxDistance, float pBranchSize, float pCutOff
 	return mAttractionPoints.size() > 0; 
 };
 
+/**
+ * optimiseNodes()
+ *
+ * This method will optimise nodes by joining nodes with small angles between them 
+ * Note that this will invalidate our childcount, we won't update this rather leave
+ * it up to the implementation whether to recount it or use the original counts
+ *
+ * 
+ **/
+void treelogic::optimiseNodes() {
+	unsigned int node = 0;
+	std::vector<unsigned int> children;
+	
+	while (node < mNodes.size()) {
+		unsigned int mergeWith = 0;
+		
+		// first we need to find out how many children we have, we can only optimise if just one is found
+		children.clear();
+		for (unsigned int n = node+1; n < mNodes.size(); n++) {
+			if (mNodes[n].parent == node) {
+				children.push_back(n);
+			};
+		};
+		
+		// only one child? check if we need to merge
+		if (children.size() == 1) {
+			vec3	parentVector = mVertices[mNodes[node].b] - mVertices[mNodes[node].a];
+			vec3	childVector = mVertices[mNodes[children[0]].b] - mVertices[mNodes[children[0]].a];
+			
+			// normalize our vectors
+			parentVector = parentVector.normalized();
+			childVector = childVector.normalized();
+			
+			// use dot product, this gives our cosine, the closer to 1.0 the more the vectors match direction
+			if ((parentVector % childVector) > 0.97) {
+				mergeWith = children[0];
+			};
+		};
+		
+		// and merge
+		if (mergeWith!=0) {
+			unsigned int eraseVertice = mNodes[node].b; // should be same as mNodes[mergeWith].a, this we'll erase..
+			
+			// merge our nodes...
+			mNodes[mergeWith].a = mNodes[node].a;
+			mNodes[mergeWith].childcount = mNodes[node].childcount;
+			mNodes[mergeWith].parent = mNodes[node].parent;
+			mNodes.erase(mNodes.begin() + node);
+			
+			// erase our vertice
+			mVertices.erase(mVertices.begin() + eraseVertice);
+			
+			// adjust our nodes
+			for (unsigned int n = 0; n < mNodes.size(); n++) {
+				if (mNodes[n].parent > node)mNodes[n].parent--;
+				if (mNodes[n].a > eraseVertice) mNodes[n].a--;
+				if (mNodes[n].b > eraseVertice) mNodes[n].b--;
+			};
+		} else {
+			node++;
+		};
+	};
+};
+
+
 /////////////////////////////////////////////////////////////////////
 // rendering
 /////////////////////////////////////////////////////////////////////
@@ -354,14 +373,23 @@ void treelogic::render() {
 	// for now, we go slowpoke OpenGl 1.0....
 	
 	// first our (remaining) attraction points
-	glBegin(GL_POINTS);
 	glPointSize(2.0f);
+	glBegin(GL_POINTS);
     glColor3f(0.0f, 1.0f, 0.0f); // green
 	for (i = 0; i < mAttractionPoints.size(); i++) {
 		vec3 position = mAttractionPoints[i].position;
         glVertex3f(position.x, position.y, position.z);
 	};
-	glPointSize(1.0f);
+	glEnd();
+
+	// also draw points for our vertices to highlight them
+	glPointSize(3.0f);
+	glBegin(GL_POINTS);
+    glColor3f(170.0f / 256.0f, 80.0f / 256.0f, 0.0f); // brown
+	for (i = 0; i < mVertices.size(); i++) {
+		vec3 position = mVertices[i];
+        glVertex3f(position.x, position.y, position.z);		
+	};
 	glEnd();
 	
 	// now draw the tree as far as we've build it...
@@ -371,9 +399,12 @@ void treelogic::render() {
 		treenode node = mNodes[i];
 		vec3 positionA = mVertices[node.a];
 		vec3 positionB = mVertices[node.b];
-
+		
         glVertex3f(positionA.x, positionA.y, positionA.z);
         glVertex3f(positionB.x, positionB.y, positionB.z);
 	};
 	glEnd();
+		
+	// reset our point size
+	glPointSize(1.0f);	
 };

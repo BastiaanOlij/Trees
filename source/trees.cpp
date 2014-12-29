@@ -7,6 +7,8 @@
 #include "trees.h"
 
 bool	paused = true;
+float	rotate = 0.0f;
+float	distance = 400.0f;
 
 void error_callback(int error, const char* description) {
 #ifdef __APPLE__
@@ -27,6 +29,17 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
 			default: break;
 		};
 	};
+};
+
+static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
+	distance += yoffset;
+	if (distance < 10.0) {
+		distance = 10.0;
+	} else if (distance > 1000.0) {
+		distance = 1000.0;
+	};
+	
+	rotate += xoffset;
 };
 
 void perspective(float fov, float aspect, float znear, float zfar) {
@@ -53,13 +66,14 @@ int main(void) {
 	
 	// and generate our attraction points, as a sample I've staged the points to get larger concentrations of points nearer to the center
 	tree->generateAttractionPoints(800, 75.0, 50.0, 2.0, 30.0);
-	tree->generateAttractionPoints(300, 90.0, 75.0, 2.0, 30.0, false);
-	tree->generateAttractionPoints(50, 100.0, 90.0, 2.0, 30.0, false);
+	tree->generateAttractionPoints(300, 90.0, 75.0, 2.0, 40.0, false);
+	tree->generateAttractionPoints(50, 100.0, 90.0, 2.0, 50.0, false);
 		
 	GLFWwindow* window = glfwCreateWindow(1024, 768, "Test tree logic", NULL, NULL);
 	if (window) {
 		glfwMakeContextCurrent(window);
 		glfwSetKeyCallback(window, key_callback);
+		glfwSetScrollCallback(window, scroll_callback);
 		
 		while (!glfwWindowShouldClose(window)) {
 	        float ratio;
@@ -80,10 +94,10 @@ int main(void) {
 			// note, with just an identity matrix our "camera" is at 0.0 ,0.0 ,0.0 looking straight ahead (looking towards 0.0 ,0.0 , -1.0)..
 			
 			// as whatever we render will be centered at 0.0, 0.0, 0.0 move it to a better location..
-			glTranslatef(0.0f, -150.0f, -400.0f);
+			glTranslatef(0.0f, -100.0f, -distance);
 			
 			// and rotate it so we can see what is going on...
-	        glRotatef((float) glfwGetTime() * 50.f, 0.f, 1.f, 0.f);
+	        glRotatef(rotate, 0.f, 1.f, 0.f);
 			
 			tree->render();
 			
@@ -93,13 +107,17 @@ int main(void) {
 					stage = grow_roots_stage;
 					
 					// we also add a small point cloud for our roots to grow next
-					tree->generateAttractionPoints(100, 50.0, 10.0, 0.2, -3.0, false);					
+					tree->generateAttractionPoints(200, 50.0, 10.0, 0.2, -3.0, false);					
 				};
 			} else if ((stage == grow_roots_stage) && !paused) {
-				if (!tree->doIteration(25.0, 2.0, 5.0, vec3(0.0, 0.0, 0.0))) {
+				if (!tree->doIteration(100.0, 2.0, 10.0, vec3(0.0, 0.0, 0.0))) {
 					stage = optimise_tree_stage;
 					paused = true;
 				};
+			} else if ((stage == optimise_tree_stage) && !paused) {
+				tree->optimiseNodes();
+				stage = build_mesh_stage;
+				paused = true;
 			};
 						
 			glfwSwapBuffers(window);

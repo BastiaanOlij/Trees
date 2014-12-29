@@ -7,6 +7,9 @@
  * By Bastiaan Olij - 2014
 ********************************************************************/
 
+#ifndef treelogich
+#define treelogich
+
 #define		GLFW_INCLUDE_GL_3
 #include <GLEW/glew.h>
 #include <GLFW/glfw3.h>
@@ -17,45 +20,7 @@
 #include <time.h> 
 #include <vector>
 
-// class for our vector
-class vec3 {
-public:
-	float x;
-	float y;
-	float z;
-	
-	vec3();
-	vec3(float pX, float pY, float pZ);
-	vec3(const vec3& pCopy);
-
-	float length();
-	vec3 normalize();
-	vec3& operator=(const vec3& pCopy);
-	vec3& operator+=(const vec3& pAdd);
-	inline vec3 operator+(const vec3 &pAdd) {
-		vec3 copy = *this;
-		copy += pAdd;
-		return copy;
-	};
-	vec3& operator-=(const vec3& pSub);
-	inline vec3 operator-(const vec3 &pSub) {
-		vec3 copy = *this;
-		copy -= pSub;
-		return copy;
-	};
-	vec3& operator*=(float pMult);
-	inline vec3 operator*(float pMult) {
-		vec3 copy = *this;
-		copy /= pMult;
-		return copy;
-	};
-	vec3& operator/=(float pDiv);
-	inline vec3 operator/(float pDiv) {
-		vec3 copy = *this;
-		copy /= pDiv;
-		return copy;
-	};	
-};
+#include "vec3.h"
 
 // class for our attraction points
 class attractionPoint {
@@ -74,11 +39,13 @@ public:
 // class for a node
 class treenode {
 public:
-	unsigned int a;
-	unsigned int b;
+	unsigned int a;												// index to our vertex buffer where our node starts
+	unsigned int b;												// index to our vertex buffer where our node ends
+	int parent;													// index to our node buffer pointing to our parent (-1 if this is a root node)
+	unsigned int childcount;									// number of children (including their children)
 	
 	treenode();
-	treenode(unsigned int pA, unsigned int pB);
+	treenode(unsigned int pA, unsigned int pB, int pParent = -1);
 	treenode(const treenode& pCopy);
 	
 	treenode& operator=(const treenode& pCopy);
@@ -104,6 +71,10 @@ public:
 	void generateAttractionPoints(unsigned int pNumOfPoints = 5000, float pOuterRadius = 100.0f, float pInnerRadius = 50.0f, float pAspect = 3.0f, float pOffsetY = 20.0f, bool pClear = true);
 	bool doIteration(float pMaxDistance = 75.0f, float pBranchSize = 5.0f, float pCutOffDistance = 10.0f, vec3 pBias = vec3(0.0, 0.0, 0.0));
 	
+	void optimiseNodes();
+	
 	// rendering
 	void render();
 };
+
+#endif
