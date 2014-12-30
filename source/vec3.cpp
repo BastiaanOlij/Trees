@@ -1,6 +1,8 @@
 /********************************************************************
  * 3 dimensional vector class
  * 
+ * Note that it can be accessed as x,y,z or r,g,b
+ *
  * By Bastiaan Olij - 2014
 ********************************************************************/
 
@@ -25,7 +27,7 @@ vec3::vec3(const vec3& pCopy) {
 	z = pCopy.z;
 };
 
-float vec3::length() {
+float vec3::length() const {
 	float l = (x * x) + (y * y) + (z * z);
 	if (l==0.0f) {
 		return 0.0f;
@@ -34,9 +36,9 @@ float vec3::length() {
 	};
 };
 
-vec3 vec3::normalized() {
+vec3 vec3::normalized() const {
 	float l = length();
-	if (l == 0.0f) {
+	if (l < 0.0001f) {
 		return vec3(0.0f, 1.0f, 0.0f);
 	} else {
 		return vec3(x / l, y / l, z / l);

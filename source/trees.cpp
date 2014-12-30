@@ -107,7 +107,7 @@ int main(void) {
 					stage = grow_roots_stage;
 					
 					// we also add a small point cloud for our roots to grow next
-					tree->generateAttractionPoints(200, 50.0, 10.0, 0.2, -3.0, false);					
+					tree->generateAttractionPoints(200, 50.0, 20.0, 0.2, -3.0, false);					
 				};
 			} else if ((stage == grow_roots_stage) && !paused) {
 				if (!tree->doIteration(100.0, 2.0, 10.0, vec3(0.0, 0.0, 0.0))) {

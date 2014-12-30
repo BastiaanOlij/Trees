@@ -94,7 +94,7 @@ treelogic::treelogic() {
 	mLastNumOfVerts	= 1;
 	
 	// add our root vertex
-	mVertices.push_back(vec3(0.0, 0.0, 0.0)); // our tree "root"
+	addVertex(vec3(0.0, 0.0, 0.0)); // our tree "root"
 };
 
 treelogic::~treelogic() {
@@ -120,6 +120,37 @@ float treelogic::randf(float pMin, float pMax) {
 	
 	return randomNumber + pMin; // and return a number between min and max
 };
+
+/**
+ * addVertex(pVertex)
+ *
+ * Adds a vertex to our vertex array (and initializes a normal and texture coord)
+ **/
+unsigned int treelogic::addVertex(const vec3& pVertex) {
+	mVertices.push_back(pVertex);
+	mNormals.push_back(pVertex.normalized()); // just for now, this will be updates
+	mTexCoords.push_back(vec2(0.0f, 0.0f));
+	
+	return mVertices.size()-1;
+};
+
+/**
+ * remVertex(pIndex)
+ *
+ * Removes the vertex at index pIndex and updates related arrays
+ **/
+void treelogic::remVertex(unsigned int pIndex) {
+	mVertices.erase(mVertices.begin() + pIndex);
+	mNormals.erase(mNormals.begin() + pIndex);
+	mTexCoords.erase(mTexCoords.begin() + pIndex);
+	
+	// adjust our other nodes
+	for (unsigned int n = 0; n < mNodes.size(); n++) {
+		if (mNodes[n].a > pIndex) mNodes[n].a--;
+		if (mNodes[n].b > pIndex) mNodes[n].b--;
+	};	
+};
+
 
 /////////////////////////////////////////////////////////////////////
 // tree generation code
@@ -153,14 +184,15 @@ unsigned int treelogic::growBranch(unsigned int pFromVertex, vec3 pTo) {
 		toVector = toVector.normalized();
 		
 		// check if we're backtracking, this can happen if we're "trapped" between two equal distanced but opposite attraction points
-		if ((parentVector % toVector) < -0.8) {
+		float dot = parentVector % toVector;
+		if (dot < -0.5f) {
 			// use a cross product of the two vectors 
 			pTo = mVertices[mNodes[parent].b] + (parentVector * toVector);
 		};		
 	};
 	
 	// add our new vertice
-	mVertices.push_back(pTo);
+	addVertex(pTo);
 	
 	// add our node
 	mNodes.push_back(treenode(pFromVertex, mVertices.size()-1, parent));
@@ -234,11 +266,13 @@ bool treelogic::doIteration(float pMaxDistance, float pBranchSize, float pCutOff
 	unsigned int i, v;
 	std::vector<float> numOfAPoints;
 	std::vector<vec3> directions;
+	std::vector<unsigned int> lastClosest;
 	
 	// init our temporary buffers
 	for (v = 0; v < numVerts; v++) {
 		numOfAPoints.push_back(0.0);
 		directions.push_back(vec3(0.0f, 0.0f, 0.0f));
+		lastClosest.push_back(0);
 	};
 	
 	// find out what our closest vertice to each attraction points is:
@@ -272,7 +306,8 @@ bool treelogic::doIteration(float pMaxDistance, float pBranchSize, float pCutOff
 				// count our vertice
 				numOfAPoints[point.closestVertice] += 1.0;
 				vec3 norm = mAttractionPoints[i].position - mVertices[point.closestVertice];
-				directions[point.closestVertice] += norm.normalized();				
+				directions[point.closestVertice] += norm.normalized();
+				lastClosest[point.closestVertice] = i;
 			};
 			
 			// and advance
@@ -288,8 +323,31 @@ bool treelogic::doIteration(float pMaxDistance, float pBranchSize, float pCutOff
 		if (numOfAPoints[v] > 0.0) {
 			vec3	vert = mVertices[v];
 			directions[v] /= numOfAPoints[v];
-			directions[v] = directions[v].normalized() * pBranchSize;				
-			vert += directions[v] + pBias;
+			float	len = directions[v].length();
+			if (len < 0.1f) {
+				// this means that our points are at opposite ends, if so we ignore the last attraction point
+				
+				// get the vector to our last attraction point
+				vec3 norm = mAttractionPoints[lastClosest[v]].position - vert;
+
+				// take it out
+				directions[v] *= numOfAPoints[v];
+				directions[v] -= norm.normalized();
+				directions[v] /= numOfAPoints[v] - 1;
+				
+				// recalculate our length
+				len = directions[v].length();
+			};
+			
+			// and check our length again to be safe
+			if (len < 0.1f) {
+				// if all else fails, just add an arbitrary distance
+				vert += vec3(0.0, 1.0, 0.0);
+			} else {
+				directions[v] /= len;
+				directions[v] *= pBranchSize;				
+				vert += directions[v] + pBias;				
+			};
 			
 			growBranch(v, vert);			
 		};
@@ -305,17 +363,24 @@ bool treelogic::doIteration(float pMaxDistance, float pBranchSize, float pCutOff
  * This method will optimise nodes by joining nodes with small angles between them 
  * Note that this will invalidate our childcount, we won't update this rather leave
  * it up to the implementation whether to recount it or use the original counts
- *
  * 
  **/
 void treelogic::optimiseNodes() {
 	unsigned int node = 0;
 	std::vector<unsigned int> children;
+	bool		newNode = true;
+	vec3		parentVector;
 	
 	while (node < mNodes.size()) {
 		unsigned int mergeWith = 0;
 		
-		// first we need to find out how many children we have, we can only optimise if just one is found
+		// see if we need to update our vector because we've got a new node
+		if (newNode) {
+			parentVector = mVertices[mNodes[node].b] - mVertices[mNodes[node].a];
+			parentVector = parentVector.normalized();			
+		};
+		
+		// we need to find out how many children we have, we can only optimise if just one is found
 		children.clear();
 		for (unsigned int n = node+1; n < mNodes.size(); n++) {
 			if (mNodes[n].parent == node) {
@@ -325,15 +390,12 @@ void treelogic::optimiseNodes() {
 		
 		// only one child? check if we need to merge
 		if (children.size() == 1) {
-			vec3	parentVector = mVertices[mNodes[node].b] - mVertices[mNodes[node].a];
 			vec3	childVector = mVertices[mNodes[children[0]].b] - mVertices[mNodes[children[0]].a];
-			
-			// normalize our vectors
-			parentVector = parentVector.normalized();
 			childVector = childVector.normalized();
 			
 			// use dot product, this gives our cosine, the closer to 1.0 the more the vectors match direction
-			if ((parentVector % childVector) > 0.97) {
+			float dot = parentVector % childVector;
+			if (dot > 0.995) {
 				mergeWith = children[0];
 			};
 		};
@@ -342,27 +404,29 @@ void treelogic::optimiseNodes() {
 		if (mergeWith!=0) {
 			unsigned int eraseVertice = mNodes[node].b; // should be same as mNodes[mergeWith].a, this we'll erase..
 			
-			// merge our nodes...
-			mNodes[mergeWith].a = mNodes[node].a;
-			mNodes[mergeWith].childcount = mNodes[node].childcount;
-			mNodes[mergeWith].parent = mNodes[node].parent;
-			mNodes.erase(mNodes.begin() + node);
-			
-			// erase our vertice
-			mVertices.erase(mVertices.begin() + eraseVertice);
-			
-			// adjust our nodes
+			// copy our node b from our merge node into our current node, then remove our merged node
+			mNodes[node].b = mNodes[mergeWith].b;			
+			mNodes.erase(mNodes.begin() + mergeWith);
+						
+			// adjust our other nodes
 			for (unsigned int n = 0; n < mNodes.size(); n++) {
-				if (mNodes[n].parent > node)mNodes[n].parent--;
-				if (mNodes[n].a > eraseVertice) mNodes[n].a--;
-				if (mNodes[n].b > eraseVertice) mNodes[n].b--;
+				if (mNodes[n].parent == mergeWith) { 
+					mNodes[n].parent = node;
+				} else if (mNodes[n].parent > mergeWith) {
+					mNodes[n].parent--;
+				};
 			};
+
+			// erase our vertice we no longer need
+			remVertex(eraseVertice);
+			
+			newNode = false; // we keep checking against our original vector!
 		} else {
 			node++;
+			newNode = true;
 		};
 	};
 };
-
 
 /////////////////////////////////////////////////////////////////////
 // rendering

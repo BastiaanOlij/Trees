@@ -20,9 +20,10 @@
 #include <time.h> 
 #include <vector>
 
+#include "vec2.h"
 #include "vec3.h"
 
-// class for our attraction points
+// class for our attraction point
 class attractionPoint {
 public:
 	vec3 position;
@@ -36,7 +37,7 @@ public:
 	attractionPoint& operator=(const attractionPoint& pCopy);
 };
 
-// class for a node
+// class for a node in our tree
 class treenode {
 public:
 	unsigned int a;												// index to our vertex buffer where our node starts
@@ -51,14 +52,31 @@ public:
 	treenode& operator=(const treenode& pCopy);
 };
 
+// class for a slice
+class slice {
+public:
+	unsigned int	p[5];										// 5 vertices to a slice
+	
+	slice();
+	slice(const slice& pCopy);
+		
+};
+
+// Our treelogic class, note that after we are finished only mVertices, mNormals, mTexCoords and mElements are relevant
 class treelogic {
 private:
-	std::vector<attractionPoint>		mAttractionPoints;
-	std::vector<vec3>					mVertices;
-	std::vector<treenode>				mNodes;
-	unsigned int						mLastNumOfVerts;		// number of vertices before we added our last round of nodes
+	std::vector<attractionPoint>		mAttractionPoints;		// our attraction points
+	std::vector<vec3>					mVertices;				// vertices that make up our tree
+	std::vector<vec3>					mNormals;				// normals for our vertice
+	std::vector<vec2>					mTexCoords;				// texture coordinates
+	std::vector<treenode>				mNodes;					// nodes used to construct our tree skeleton
+	std::vector<slice>					mSlices;				// slices that form the basis of
 	
+	unsigned int						mLastNumOfVerts;		// number of vertices before we added our last round of nodes
+
 	float randf(float pMin = -1.0f, float pMax = 1.0f);
+	unsigned int addVertex(const vec3& pVertex);
+	void remVertex(unsigned int pIndex);
 
 protected:
 public:	
@@ -70,8 +88,8 @@ public:
 	unsigned int growBranch(unsigned int pFromVertex, vec3 pTo);
 	void generateAttractionPoints(unsigned int pNumOfPoints = 5000, float pOuterRadius = 100.0f, float pInnerRadius = 50.0f, float pAspect = 3.0f, float pOffsetY = 20.0f, bool pClear = true);
 	bool doIteration(float pMaxDistance = 75.0f, float pBranchSize = 5.0f, float pCutOffDistance = 10.0f, vec3 pBias = vec3(0.0, 0.0, 0.0));
-	
 	void optimiseNodes();
+	void createModel();
 	
 	// rendering
 	void render();

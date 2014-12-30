@@ -1,5 +1,7 @@
 /********************************************************************
  * 3 dimensional vector class
+ *
+ * Note that it can be accessed as x,y,z or r,g,b
  * 
  * By Bastiaan Olij - 2014
 ********************************************************************/
@@ -8,20 +10,31 @@
 #define vec3h
 
 #include <math.h>
+#include "vec2.h"
 
 // class for our vector
 class vec3 {
 public:
-	float x;
-	float y;
-	float z;
+	union { float x; float r; };
+	union { float y; float g; };
+	union { float z; float b; };
 	
 	vec3();
 	vec3(float pX, float pY, float pZ);
 	vec3(const vec3& pCopy);
+	
+	inline vec2 xy() {
+		return vec2(x, y);
+	};
+	inline vec2 xz() {
+		return vec2(x, z);
+	};
+	inline vec2 yz() {
+		return vec2(y, z);
+	};
 
-	float length();							// returns the lenght of our vector
-	vec3 normalized();						// returns a unit vector for our vector (|N|)
+	float length() const;					// returns the lenght of our vector
+	vec3 normalized() const;				// returns a unit vector for our vector (|N|)
 	vec3& operator=(const vec3& pCopy);		// copy operator
 	vec3& operator+=(const vec3& pAdd);		// adds a vector to our vector
 	inline vec3 operator+(const vec3 &pAdd) {
