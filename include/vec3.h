@@ -37,32 +37,32 @@ public:
 	vec3 normalized() const;				// returns a unit vector for our vector (|N|)
 	vec3& operator=(const vec3& pCopy);		// copy operator
 	vec3& operator+=(const vec3& pAdd);		// adds a vector to our vector
-	inline vec3 operator+(const vec3 &pAdd) {
+	inline vec3 operator+(const vec3 &pAdd) const {
 		vec3 copy = *this;
 		copy += pAdd;
 		return copy;
 	};
 	vec3& operator-=(const vec3& pSub);		// substracts a vector from our vector
-	inline vec3 operator-(const vec3 &pSub) {
+	inline vec3 operator-(const vec3 &pSub) const {
 		vec3 copy = *this;
 		copy -= pSub;
 		return copy;
 	};
 	vec3& operator*=(float pMult);			// multiply our vector with a scalar
-	inline vec3 operator*(float pMult) {
+	inline vec3 operator*(float pMult) const {
 		vec3 copy = *this;
-		copy /= pMult;
+		copy *= pMult;
 		return copy;
 	};
 	vec3& operator/=(float pDiv);			// divide our vector with a scalar
-	inline vec3 operator/(float pDiv) {
+	inline vec3 operator/(float pDiv) const {
 		vec3 copy = *this;
 		copy /= pDiv;
 		return copy;
 	};
 
-	float operator%(const vec3 &pWith);		// return dot product with a second vector
-	vec3 operator*(const vec3 &pCross);		// cross product of two vectors
+	float operator%(const vec3 &pWith) const;	// return dot product with a second vector
+	vec3 operator*(const vec3 &pCross) const;	// cross product of two vectors
 	
 };
 

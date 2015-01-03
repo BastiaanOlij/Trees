@@ -1,33 +1,36 @@
 /********************************************************************
- * 3 dimensional vector class
+ * 4 dimensional vector class
  * 
- * Note that it can be accessed as x,y,z or r,g,b
+ * Note that it can be accessed as x,y,z,w or r,g,b,a
  *
  * By Bastiaan Olij - 2014
 ********************************************************************/
 
-#include "vec3.h"
+#include "vec4.h"
 
-vec3::vec3(){
+vec4::vec4(){
 	x = 0;
 	y = 0;
-	z = 0;	
+	z = 0;
+	w = 0;
 };
 
-vec3::vec3(float pX, float pY, float pZ) {
+vec4::vec4(float pX, float pY, float pZ, float pW) {
 	x = pX;
 	y = pY;
 	z = pZ;	
+	w = pW;
 };
 
-vec3::vec3(const vec3& pCopy) {
+vec4::vec4(const vec4& pCopy) {
 	x = pCopy.x;
 	y = pCopy.y;
 	z = pCopy.z;
+	w = pCopy.w;
 };
 
-float vec3::length() const {
-	float l = (x * x) + (y * y) + (z * z);
+float vec4::length() const {
+	float l = (x * x) + (y * y) + (z * z) + (w * w);
 	if (l==0.0f) {
 		return 0.0f;
 	} else {
@@ -35,44 +38,48 @@ float vec3::length() const {
 	};
 };
 
-vec3 vec3::normalized() const {
+vec4 vec4::normalized() const {
 	float l = length();
 	if (l < 0.0001f) {
-		return vec3(0.0f, 1.0f, 0.0f);
+		return vec4(0.0f, 1.0f, 0.0f, 0.04f);
 	} else {
-		return vec3(x / l, y / l, z / l);
+		return vec4(x / l, y / l, z / l, w / l);
 	};
 };
 
-vec3& vec3::operator=(const vec3 &pCopy) {
+vec4& vec4::operator=(const vec4 &pCopy) {
 	x = pCopy.x;
 	y = pCopy.y;
 	z = pCopy.z;
+	w = pCopy.w;
 	return (*this);
 };
 
-vec3& vec3::operator+=(const vec3& pAdd) {
+vec4& vec4::operator+=(const vec4& pAdd) {
 	x += pAdd.x;
 	y += pAdd.y;
 	z += pAdd.z;
+	w += pAdd.w;
 	return (*this);
 };
 
-vec3& vec3::operator-=(const vec3& pSub) {
+vec4& vec4::operator-=(const vec4& pSub) {
 	x -= pSub.x;
 	y -= pSub.y;
 	z -= pSub.z;
+	z -= pSub.w;
 	return (*this);	
 };
 
-vec3& vec3::operator*=(float pMult) {
+vec4& vec4::operator*=(float pMult) {
 	x *= pMult;
 	y *= pMult;
 	z *= pMult;
+	w *= pMult;
 	return (*this);
 };
 
-vec3& vec3::operator/=(float pDiv) {
+vec4& vec4::operator/=(float pDiv) {
 	if (pDiv == 0.0) {
 		// divide by 0, really should throw an exception error
 		return (*this);			
@@ -84,14 +91,9 @@ vec3& vec3::operator/=(float pDiv) {
 	x /= pDiv;
 	y /= pDiv;
 	z /= pDiv;
+	w /= pDiv;
 	
 	return (*this);	
 };
 
-float vec3::operator%(const vec3 &pWith) const {
-	return (this->x * pWith.x) + (this->y * pWith.y) + (this->z * pWith.z);
-};
 
-vec3 vec3::operator*(const vec3 &pCross) const {
-	return vec3((y*pCross.z) - (z * pCross.y) , (z*pCross.x) - (x * pCross.z) , (x*pCross.y) - (y * pCross.x));
-};

@@ -39,7 +39,7 @@ public:
 	vec2& operator*=(float pMult);			// multiply our vector with a scalar
 	inline vec2 operator*(float pMult) {
 		vec2 copy = *this;
-		copy /= pMult;
+		copy *= pMult;
 		return copy;
 	};
 	vec2& operator/=(float pDiv);			// divide our vector with a scalar
