@@ -16,6 +16,8 @@ Besides the obvious need of having a C++ compiler and OpenGL 4 capable hardware 
 - http://glew.sourceforge.net/
 - https://github.com/nothings/stb
 
+The textures that are used were downloaded from http://cgtextures.com/
+
 This repository contains those files from these libraries required to compile this on a Mac.
 
 License
