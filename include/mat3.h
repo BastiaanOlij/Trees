@@ -22,6 +22,9 @@ public:
 	// interface
 	void identity();
 	void rotate(float pAngle, float pX, float pY, float pZ);
+	inline void rotate(float pAngle, const vec3& pAround) {
+		rotate(pAngle, pAround.x, pAround.y, pAround.z);
+	};
 	
 	// operators
 	mat3& operator=(const mat3& pCopy);
@@ -31,6 +34,8 @@ public:
 		copy *= pMult;
 		return copy;		
 	};
+	vec3 operator*(const vec3& pVec) const;
+	
 };
 
 #endif

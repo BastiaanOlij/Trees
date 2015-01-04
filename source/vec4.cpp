@@ -22,6 +22,14 @@ vec4::vec4(float pX, float pY, float pZ, float pW) {
 	w = pW;
 };
 
+vec4::vec4(const vec3& pCopy, float pW) {
+	x = pCopy.x;
+	y = pCopy.y;
+	z = pCopy.z;
+	w = pW;	
+};
+
+
 vec4::vec4(const vec4& pCopy) {
 	x = pCopy.x;
 	y = pCopy.y;

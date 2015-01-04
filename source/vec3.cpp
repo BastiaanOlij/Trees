@@ -20,6 +20,12 @@ vec3::vec3(float pX, float pY, float pZ) {
 	z = pZ;	
 };
 
+vec3::vec3(const vec2& pCopy, float pZ) {
+	x = pCopy.x;
+	y = pCopy.y;
+	z = pZ;
+};
+
 vec3::vec3(const vec3& pCopy) {
 	x = pCopy.x;
 	y = pCopy.y;

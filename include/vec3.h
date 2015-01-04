@@ -21,15 +21,16 @@ public:
 	
 	vec3();
 	vec3(float pX, float pY, float pZ);
+	vec3(const vec2& pCopy, float pZ = 0.0);
 	vec3(const vec3& pCopy);
 	
-	inline vec2 xy() {
+	inline vec2 xy() const {
 		return vec2(x, y);
 	};
-	inline vec2 xz() {
+	inline vec2 xz() const {
 		return vec2(x, z);
 	};
-	inline vec2 yz() {
+	inline vec2 yz() const {
 		return vec2(y, z);
 	};
 

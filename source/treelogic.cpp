@@ -145,6 +145,7 @@ treelogic::treelogic() {
 	addVertex(vec3(0.0, 0.0, 0.0)); // our tree "root"
 	
 	// default our shaders
+	mWireFrame = false;
 	mSimpleShader = NULL;
 	mTreeShader = NULL;
 	
@@ -195,6 +196,18 @@ treelogic::~treelogic() {
 		delete mSimpleShader;
 		mSimpleShader = NULL;
 	};
+};
+
+/////////////////////////////////////////////////////////////////////
+// properties
+/////////////////////////////////////////////////////////////////////
+
+bool treelogic::wireframe() {
+	return mWireFrame;
+};
+
+void treelogic::setWireframe(bool pWireframe) {
+	mWireFrame = pWireframe;
 };
 
 /////////////////////////////////////////////////////////////////////
@@ -577,6 +590,11 @@ void treelogic::optimiseNodes() {
  **/
 slice treelogic::createSlice(const vec3 pCenter, const vec3 pDir, float pSize, float pDistance) {
 	slice newSlice;
+	mat3  rotate;
+	float distFact = 50.0f;
+	
+	// create our vertices counter clockwise
+	rotate.rotate(-90.0f, pDir);
 	
 //	vec3 dir = vec3(-1.0, -1.0, -1.0);
 //	dir = dir.normalized();
@@ -587,39 +605,62 @@ slice treelogic::createSlice(const vec3 pCenter, const vec3 pDir, float pSize, f
 		dir.normalized();
 	};
 	
-	// we need two vectors for our direction
-	vec3 crossA = pDir * dir;
-	crossA = crossA.normalized();
-	vec3 crossB = pDir * crossA;
-	crossB = crossB.normalized();
+	// Cross product to create our initial plane
+	vec3 dirA = pDir * dir;
+	dirA = dirA.normalized();
+	vec3 dirB = rotate * dirA;
 	
 	// now create our vertices
-	int p = addVertex(pCenter + (crossA * pSize));
-	mNormals[p] = crossA;
-	mTexCoords[p] = vec2(0, pDistance / 100.0);
+	int p = addVertex(pCenter + (dirA * pSize));
+	mNormals[p] = dirA;
+	mTexCoords[p] = vec2(0, pDistance / distFact);
 	newSlice.p[0] = p;
 	
-	p = addVertex(pCenter + (crossB * pSize));
-	mNormals[p] = crossB;
-	mTexCoords[p] = vec2(0.25, pDistance / 100.0);
+	p = addVertex(pCenter + (dirB * pSize));
+	mNormals[p] = dirB;
+	mTexCoords[p] = vec2(0.25, pDistance / distFact);
 	newSlice.p[1] = p;
+	
+	dirB = rotate * dirB;
 
-	p = addVertex(pCenter - (crossA * pSize));
-	mNormals[p] = (vec3(0.0f, 0.0f, 0.0f) - crossA);
-	mTexCoords[p] = vec2(0.50, pDistance / 100.0);
+	p = addVertex(pCenter + (dirB * pSize));
+	mNormals[p] = dirB;
+	mTexCoords[p] = vec2(0.50, pDistance / distFact);
 	newSlice.p[2] = p;
+	
+	dirB = rotate * dirB;
 
-	p = addVertex(pCenter - (crossB * pSize));
-	mNormals[p] = (vec3(0.0f, 0.0f, 0.0f) - crossB);
-	mTexCoords[p] = vec2(0.75, pDistance / 100.0);
+	p = addVertex(pCenter + (dirB * pSize));
+	mNormals[p] = dirB;
+	mTexCoords[p] = vec2(0.75, pDistance / distFact);
 	newSlice.p[3] = p;
 
-	p = addVertex(pCenter + (crossA * pSize));
-	mNormals[p] = crossA;
-	mTexCoords[p] = vec2(1.0, pDistance / 100.0);
+	// the last vertex is in the same location as the first but with different texture coords
+	p = addVertex(pCenter + (dirA * pSize));
+	mNormals[p] = dirA;
+	mTexCoords[p] = vec2(1.0, pDistance / distFact);
 	newSlice.p[4] = p;
 	
 	return newSlice;
+};
+
+/**
+ * capSlice(pSlice)
+ *
+ * Puts a cap at the end of a branch
+ **/
+void treelogic::capSlice(const slice& pSlice) {
+	quad newQuad;
+
+	newQuad.v[0] = pSlice.p[3];
+	newQuad.v[1] = pSlice.p[2];
+	newQuad.v[2] = pSlice.p[1];
+	newQuad.v[3] = pSlice.p[0];
+
+	mElements.push_back(newQuad);
+
+	// make sure we update our buffers
+	mUpdateBuffers = true;
 };
 
 /**
@@ -680,7 +721,7 @@ void treelogic::joinMultiSlices(long pSliceCount, slice* pSlices) {
  * pDistance	- distance "travelled" along our tree, we use this for texture coordinates
  *
  **/
-void treelogic::expandChildren(unsigned long pParentNode, const slice& pParentSlice, vec3 pOffset, float pDistance) {
+void treelogic::expandChildren(unsigned long pParentNode, const slice& pParentSlice, vec3 pOffset, float pDistance, float pMinR, float pFactor) {
 	// find out how many child nodes we have
 	std::vector<int> childNodes;
 	
@@ -696,7 +737,7 @@ void treelogic::expandChildren(unsigned long pParentNode, const slice& pParentSl
 		} else {
 			// it ends here... 			
 			float	size		= mNodes[pParentNode].childcount;
-			size = (size / 200.0f) + 1.0f;
+			size = (size / pFactor) + pMinR;
 			vec3	direction	= mVertices[mNodes[pParentNode].b] - mVertices[mNodes[pParentNode].a];
 			float	len			= direction.length();
 			direction /= len;
@@ -705,12 +746,13 @@ void treelogic::expandChildren(unsigned long pParentNode, const slice& pParentSl
 
 			// join final piece
 			joinTwoSlices(pParentSlice, childSlice);
+			capSlice(childSlice);
 		};
 	} else if (childNodes.size() == 1) {
 		// we just need to create a slice at our root
 		int		node		= childNodes[0];
 		float	size		= mNodes[node].childcount;
-		size = (size / 200.0f) + 1.0f;
+		size = (size / pFactor) + pMinR;
 		vec3	direction	= mVertices[mNodes[node].b] - mVertices[mNodes[node].a];
 		float	len			= direction.length();
 		direction /= len;
@@ -729,7 +771,7 @@ void treelogic::expandChildren(unsigned long pParentNode, const slice& pParentSl
 			joinTwoSlices(pParentSlice, childSlice);
 		};
 
-		expandChildren(node, childSlice, pOffset, pDistance + len);		
+		expandChildren(node, childSlice, pOffset, pDistance + len, pMinR, pFactor);		
 	} else {		
 		int		firstChild	= (pParentNode == -1 ? 0 : 1);
 		int		numSlices	= childNodes.size() + firstChild;
@@ -739,7 +781,7 @@ void treelogic::expandChildren(unsigned long pParentNode, const slice& pParentSl
 			// draw our tree up to the point of our split
 			
 			float	size		= mNodes[pParentNode].childcount;
-			size = (size / 200.0f) + 1.0f;
+			size = (size / pFactor) + pMinR;
 			vec3	direction	= mVertices[mNodes[pParentNode].b] - mVertices[mNodes[pParentNode].a];
 			float	len			= direction.length();
 			direction /= len;
@@ -757,7 +799,7 @@ void treelogic::expandChildren(unsigned long pParentNode, const slice& pParentSl
 		for (int n = 0; n < childNodes.size(); n++) {
 			int		node		= childNodes[n];
 			float	size		= mNodes[node].childcount;
-			size = (size / 200.0f) + 1.0f;
+			size = (size / pFactor) + pMinR;
 			vec3	direction	= mVertices[mNodes[node].b] - mVertices[mNodes[node].a];
 			float	len			= direction.length();
 			direction /= len;
@@ -770,7 +812,7 @@ void treelogic::expandChildren(unsigned long pParentNode, const slice& pParentSl
 
 			slices[n + firstChild] = createSlice(mVertices[mNodes[node].a] + pOffset + offset, direction, size, pDistance + size);
 
-			expandChildren(node, slices[n + firstChild], pOffset + offset, pDistance + size + len);		
+			expandChildren(node, slices[n + firstChild], pOffset + offset, pDistance + size + len, pMinR, pFactor);		
 		};
 		
 		// now create joining piece
@@ -787,11 +829,11 @@ void treelogic::expandChildren(unsigned long pParentNode, const slice& pParentSl
  * This method will use our node tree to build a model of our tree
  *
  **/
-void treelogic::createModel() {
+void treelogic::createModel(float pMinR, float pFactor) {
 	unsigned long	vertCount	= mVertices.size(); // remember how many vertices we have right now so we can remove these later on...
 
 	slice emptySlize;
-	expandChildren(-1, emptySlize, vec3(0.0f, 0.0f, 0.0f), 0.0f);
+	expandChildren(-1, emptySlize, vec3(0.0f, 0.0f, 0.0f), 0.0f, pMinR, pFactor);
 	
 	// now remove our nodes and related vertices, we no longer need them...
 	for (unsigned long i = 0; i < vertCount; i++) {
@@ -857,26 +899,35 @@ layout (location=0) in vec3	vertices;\r\n\
 layout (location=1) in vec3	normals;\r\n\
 layout (location=2) in vec2	texcoords;\r\n\
 \r\n\
+uniform mat4 mvp;\r\n\
+\r\n\
 out VS_OUT {\r\n\
+  vec3 Vp;\r\n\
   vec3 N;\r\n\
   vec2 T;\r\n\
 } vs_out;\r\n\
 \r\n\
 void main() {\r\n\
-  gl_Position = vec4(vertices, 1.0);\r\n\
+  vec4 V = vec4(vertices, 1.0);\r\n\
+  gl_Position = V;\r\n\
+  V = mvp * V;\r\n\
+  vs_out.Vp = V.xyz / V.w;\r\n\
   vs_out.N = normals;\r\n\
   vs_out.T = texcoords;\r\n\
 }";
 
 // using a Phong Tessellation technique for Quads as described here: http://liris.cnrs.fr/Documents/Liris-6161.pdf
-// Tessellation level is hardocded just to see if this works but could be increased in real implementation.
-// Also if the tree is further away it would be good to skip tesselation alltogether
+// Tessellation level is changed depending on our projected screen coordinates. 
+// At some point we should add a check that if the tree is further away it would be good to skip tesselation alltogether.
 
 char treeTessShader[] = "#version 410 core\r\n\
 \r\n\
 layout (vertices = 4) out;\r\n\
 \r\n\
+const float precission = 25.0;\r\n\
+const float maxTessGenLevel = 16;\r\n\
 in VS_OUT {\r\n\
+  vec3 Vp;\r\n\
   vec3 N;\r\n\
   vec2 T;\r\n\
 } ts_in[];\r\n\
@@ -888,13 +939,46 @@ out TS_OUT {\r\n\
 \r\n\
 void main() {\r\n\
   if (gl_InvocationID == 0) {\r\n\
-    // we just pass through\r\n\
-    gl_TessLevelOuter[0] = 4;\r\n\
-    gl_TessLevelOuter[1] = 1;\r\n\
-    gl_TessLevelOuter[2] = 4;\r\n\
-    gl_TessLevelOuter[3] = 1;\r\n\
-    gl_TessLevelInner[0] = 1;\r\n\
-    gl_TessLevelInner[1] = 3;\r\n\
+    // get our screen coords\r\n\
+    vec3 V0 = ts_in[0].Vp;\r\n\
+    vec3 V1 = ts_in[1].Vp;\r\n\
+    vec3 V2 = ts_in[2].Vp;\r\n\
+    vec3 V3 = ts_in[3].Vp;\r\n\
+\r\n\
+    if ((V0.z <= 0.0) && (V1.z <= 0.0) && (V2.z <= 0.0) && (V3.z <= 0.0)) {\r\n\
+        // Behind the camera\r\n\
+        gl_TessLevelOuter[0] = 0;\r\n\
+        gl_TessLevelOuter[1] = 0;\r\n\
+        gl_TessLevelOuter[2] = 0;\r\n\
+        gl_TessLevelOuter[3] = 0;\r\n\
+        gl_TessLevelInner[0] = 0;\r\n\
+        gl_TessLevelInner[1] = 0;\r\n\
+	} else {\r\n\
+        float level0 = maxTessGenLevel;\r\n\
+        float level1 = maxTessGenLevel;\r\n\
+        float level2 = maxTessGenLevel;\r\n\
+        float level3 = maxTessGenLevel;\r\n\
+\r\n\
+        if ((V0.z>0.0) && (V2.z>0.0)) {\r\n\
+          level0 = min(maxTessGenLevel, max(length(V0.xy - V2.xy) * precission, 1.0));\r\n\
+        }\r\n\
+        if ((V0.z>0.0) && (V1.z>0.0)) {\r\n\
+          level1 = min(maxTessGenLevel, max(length(V0.xy - V1.xy) * precission, 1.0));\r\n\
+        }\r\n\
+        if ((V1.z>0.0) && (V1.z>0.0)) {\r\n\
+          level2 = min(maxTessGenLevel, max(length(V1.xy - V3.xy) * precission, 1.0));\r\n\
+        }\r\n\
+        if ((V3.z>0.0) && (V2.z>0.0)) {\r\n\
+          level3 = min(maxTessGenLevel, max(length(V3.xy - V2.xy) * precission, 1.0));\r\n\
+        }\r\n\
+\r\n\
+	    gl_TessLevelOuter[0] = level0;\r\n\
+	    gl_TessLevelOuter[1] = level1;\r\n\
+	    gl_TessLevelOuter[2] = level2;\r\n\
+	    gl_TessLevelOuter[3] = level3;\r\n\
+	    gl_TessLevelInner[0] = min(level1, level3);\r\n\
+	    gl_TessLevelInner[1] = min(level0, level2);\r\n\
+	}\r\n\
   }\r\n\
 \r\n\
   // just copy our vertices as control points\r\n\
@@ -1141,6 +1225,8 @@ void treelogic::render() {
 	// if we have our elements, start there..
 	if (mElements.size() > 0) {
 		glEnable(GL_DEPTH_TEST);
+		glEnable(GL_CULL_FACE);
+		glCullFace(GL_BACK);
 		
 		// setup our texture
 		glActiveTexture(GL_TEXTURE0);
@@ -1181,20 +1267,27 @@ void treelogic::render() {
 		mTreeShader->setMat3Uniform(mTreeShader->uniform("normalMat"), mModel.mat3x3());
 
 		// wireframe
-		// glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		if (mWireFrame) {
+			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);			
+		} else {
+			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);			
+		};
 
 		// in OpenGL we render these as patches and it goes through our tesselation shader
 		glPatchParameteri(GL_PATCH_VERTICES, 4);
 		glDrawElements(GL_PATCHES, mElements.size() * 4, GL_UNSIGNED_INT, 0);
 		
 		// back to normal..
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+		if (mWireFrame) {
+			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+		};
 		
 		// and unbind our texture
 		glBindTexture(GL_TEXTURE_2D, 0);		
 	} else {
-		// ignore depth
+		// ignore depth and culling
 		glDisable(GL_DEPTH_TEST);
+		glDisable(GL_CULL_FACE);
 		
 		// use our simple shader program
 		glUseProgram(mSimpleShader->shaderProgram());

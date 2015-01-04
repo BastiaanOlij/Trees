@@ -89,3 +89,14 @@ mat3& mat3::operator*=(const mat3& pMult) {
   
 	return (*this);
 };
+
+vec3 mat3::operator*(const vec3& pVec) const {
+	vec3 result;
+	
+	result.x = (pVec.x * mat[0][0]) + (pVec.y * mat[1][0]) + (pVec.z * mat[2][0]);
+	result.y = (pVec.x * mat[0][1]) + (pVec.y * mat[1][1]) + (pVec.z * mat[2][1]);
+	result.z = (pVec.x * mat[0][2]) + (pVec.y * mat[1][2]) + (pVec.z * mat[2][2]);
+	
+	return result;
+};
+

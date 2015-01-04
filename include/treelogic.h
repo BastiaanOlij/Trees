@@ -90,6 +90,7 @@ private:
 	
 	unsigned long						mLastNumOfVerts;		// number of vertices before we added our last round of nodes
 	
+	bool								mWireFrame;				// if true we render our wireframe
 	mat4								mProjection;			// our projection matrix
 	mat4								mView;					// our view matrix
 	mat4								mModel;					// our model matrix
@@ -111,15 +112,20 @@ private:
 	void remVertex(unsigned long pIndex);
 	
 	slice createSlice(const vec3 pCenter, const vec3 pDir, float pSize, float pDistance);
+	void capSlice(const slice& pSlice);
 	void joinTwoSlices(const slice& pA, const slice& pB);
 	void joinMultiSlices(long pSliceCount, slice* pSlices);
-	void expandChildren(unsigned long pParentNode, const slice& pParentSlice, vec3 pOffset, float pDistance);
+	void expandChildren(unsigned long pParentNode, const slice& pParentSlice, vec3 pOffset, float pDistance, float pMinR, float pFactor);
 
 protected:
 public:	
 	// constructors/destructors
 	treelogic();
 	~treelogic();
+	
+	// properties
+	bool wireframe();
+	void setWireframe(bool pWireframe);
 	
 	// matrixes
 	mat4 projection();
@@ -134,7 +140,7 @@ public:
 	void generateAttractionPoints(unsigned long pNumOfPoints = 5000, float pOuterRadius = 100.0f, float pInnerRadius = 50.0f, float pAspect = 3.0f, float pOffsetY = 20.0f, bool pClear = true);
 	bool doIteration(float pMaxDistance = 75.0f, float pBranchSize = 5.0f, float pCutOffDistance = 10.0f, vec3 pBias = vec3(0.0, 0.0, 0.0));
 	void optimiseNodes();
-	void createModel();
+	void createModel(float pMinR = 0.4f, float pFactor = 400.0f);
 	
 	// shaders
 	void initShaders();

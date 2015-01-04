@@ -10,6 +10,7 @@
 #define vec4h
 
 #include <math.h>
+#include "vec3.h"
 
 // class for our vector
 class vec4 {
@@ -21,7 +22,12 @@ public:
 	
 	vec4();
 	vec4(float pX, float pY, float pZ, float pW);
+	vec4(const vec3& pCopy, float pW = 1.0f);
 	vec4(const vec4& pCopy);
+	
+	inline vec3 xyz() const {
+		return vec3(x, y, z);			
+	};
 	
 	float length() const;					// returns the lenght of our vector
 	vec4 normalized() const;				// returns a unit vector for our vector (|N|)

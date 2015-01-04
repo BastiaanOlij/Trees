@@ -11,6 +11,7 @@
 
 #include <math.h>
 #include "vec3.h"
+#include "vec4.h"
 #include "mat3.h"
 
 class mat4 {
@@ -29,6 +30,9 @@ public:
 	void perspective(float fov, float aspect, float znear, float zfar);
 	void frustum(float pLeft, float pRight, float pBottom, float pTop, float pZNear, float pZFar);
 	void rotate(float pAngle, float pX, float pY, float pZ);
+	inline void rotate(float pAngle, const vec3& pAround) {
+		rotate(pAngle, pAround.x, pAround.y, pAround.z);
+	};
 	
 	// operators
 	mat4& operator=(const mat4& pCopy);
@@ -39,6 +43,8 @@ public:
 		return copy;		
 	};
 	mat4& operator+=(const vec3& pTranslate);
+	vec3 operator*(const vec3& pVec) const;
+	vec4 operator*(const vec4& pVec) const;
 };
 
 #endif

@@ -165,3 +165,27 @@ mat4& mat4::operator+=(const vec3& pTranslate) {
 	return (*this);
 };
 
+vec3 mat4::operator*(const vec3& pVec) const {
+	vec4 result(pVec, 1.0);
+	
+	result = (*this) * result;
+	
+	if (result.w > 0.0) {
+		result /= result.w;
+	};
+	
+	return result.xyz();
+};
+
+vec4 mat4::operator*(const vec4& pVec) const {
+	vec4 result;
+	
+	result.x = (pVec.x * mat[0][0]) + (pVec.y * mat[1][0]) + (pVec.z * mat[2][0]) + (pVec.w * mat[3][0]);
+	result.y = (pVec.x * mat[0][1]) + (pVec.y * mat[1][1]) + (pVec.z * mat[2][1]) + (pVec.w * mat[3][1]);
+	result.z = (pVec.x * mat[0][2]) + (pVec.y * mat[1][2]) + (pVec.z * mat[2][2]) + (pVec.w * mat[3][2]);
+	result.w = (pVec.x * mat[0][3]) + (pVec.y * mat[1][3]) + (pVec.z * mat[2][3]) + (pVec.w * mat[3][3]);	
+	
+	return result;
+};
+
+

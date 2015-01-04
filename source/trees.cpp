@@ -6,6 +6,7 @@
 
 #include "trees.h"
 
+bool	wireframe = false;
 bool	paused = true;
 float	rotate = 0.0f;
 float	distance = 400.0f;
@@ -23,6 +24,9 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
 			case GLFW_KEY_SPACE: {
 				paused = !paused;
 			} break;
+			case GLFW_KEY_W: {
+				wireframe = !wireframe;
+			} break;
 			case GLFW_KEY_ESCAPE: {
 		        glfwSetWindowShouldClose(window, GL_TRUE);				
 			} break;
@@ -35,8 +39,8 @@ static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) 
 	distance += yoffset;
 	if (distance < 10.0) {
 		distance = 10.0;
-	} else if (distance > 1000.0) {
-		distance = 1000.0;
+	} else if (distance > 10000.0) {
+		distance = 10000.0;
 	};
 	
 	rotate += xoffset;
@@ -93,11 +97,12 @@ int main(void) {
 		tree->growBranch(0, vec3(0.0, 30.0, 0.0));
 	
 		// and generate our attraction points, as a sample I've staged the points to get larger concentrations of points nearer to the center
-		tree->generateAttractionPoints(800, 75.0, 50.0, 2.0, 30.0);
-		tree->generateAttractionPoints(300, 90.0, 75.0, 2.0, 40.0, false);
-		tree->generateAttractionPoints(50, 100.0, 90.0, 2.0, 50.0, false);
+		tree->generateAttractionPoints(800, 75.0, 50.0, 1.5, 50.0);
+		tree->generateAttractionPoints(300, 90.0, 75.0, 1.5, 60.0, false);
+		tree->generateAttractionPoints(50, 100.0, 90.0, 1.5, 70.0, false);
 
-		tree->generateAttractionPoints(50, 100.0, 40.0, 2.0, 50.0, false);
+		// and an example with very few attraction points:
+//		tree->generateAttractionPoints(50, 100.0, 40.0, 2.0, 50.0, false);
 		
 		tree->initShaders();
 		
@@ -114,7 +119,7 @@ int main(void) {
 			// setup our projection matrix
 			mat4 projection;
 	        float ratio = width / (float) height;
-			projection.perspective(45, ratio, 1.0, 1000.0);
+			projection.perspective(45, ratio, 1.0, 10000.0);
 			tree->setProjection(projection);
 
 			// note, with just an identity matrix our "camera" is at 0.0 ,0.0 ,0.0 looking straight ahead (looking towards 0.0 ,0.0 , -1.0)..
@@ -127,6 +132,7 @@ int main(void) {
 			// we leave our model alone for now...
 			
 			// and render
+			tree->setWireframe(wireframe);
 			tree->render();
 			
 			if ((stage == grow_tree_stage) && !paused) {
