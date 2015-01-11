@@ -94,7 +94,7 @@ int main(void) {
 		treelogic * tree = new treelogic();
 	
 		// add just one branch to start of with, you could build the start of a tree here manually
-		tree->growBranch(0, vec3(0.0, 30.0, 0.0));
+		tree->growBranch(0, vec3(0.0, 10.0, 0.0));
 	
 		// and generate our attraction points, as a sample I've staged the points to get larger concentrations of points nearer to the center
 		tree->generateAttractionPoints(800, 75.0, 50.0, 1.5, 50.0);
@@ -125,7 +125,7 @@ int main(void) {
 			// note, with just an identity matrix our "camera" is at 0.0 ,0.0 ,0.0 looking straight ahead (looking towards 0.0 ,0.0 , -1.0)..
 			// but we do adjust our view
 			mat4 view;			
-			view += vec3(0.0f, -150.0f, -distance);
+			view += vec3(0.0f, -100.0f, -distance);
 			view.rotate(rotate, 0.f, 1.f, 0.f);
 			tree->setView(view);
 			
@@ -153,6 +153,8 @@ int main(void) {
 				stage = build_mesh_stage;
 				paused = true;
 			} else if ((stage == build_mesh_stage) && !paused) {
+				tree->setMinRadius(0.4f);
+				tree->setRadiusFactor(0.0005f);
 				tree->createModel();
 				stage = add_leaves_stage;
 				paused = true;

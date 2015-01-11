@@ -9,76 +9,6 @@
 
 #include "treelogic.h"
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "STB/stb_image.h"
-
-/////////////////////////////////////////////////////////////////////
-// class for our attraction points
-/////////////////////////////////////////////////////////////////////
-
-attractionPoint::attractionPoint() {
-	position.x = 0;
-	position.y = 0;
-	position.z = 0;
-	closestVertice = 0;
-};
-
-attractionPoint::attractionPoint(float pX, float pY, float pZ) {
-	position.x = pX;
-	position.y = pY;
-	position.z = pZ;
-	closestVertice = 0;
-};
-
-attractionPoint::attractionPoint(vec3 pPosition) {
-	position = pPosition;
-	closestVertice = 0;
-};
-
-attractionPoint::attractionPoint(const attractionPoint& pCopy) {
-	position = pCopy.position;
-	closestVertice = pCopy.closestVertice;
-};
-
-attractionPoint& attractionPoint::operator=(const attractionPoint& pCopy) {
-	position = pCopy.position;
-	closestVertice = pCopy.closestVertice;
-	return (*this);
-};
-
-/////////////////////////////////////////////////////////////////////
-// class for a node
-/////////////////////////////////////////////////////////////////////
-
-treenode::treenode() {
-	a = 0;
-	b = 0;
-	parent = -1;
-	childcount = 0;
-};
-
-treenode::treenode(unsigned long pA, unsigned long pB, long pParent) {
-	a = pA;
-	b = pB;
-	parent = pParent;
-	childcount = 0;
-};
-
-treenode::treenode(const treenode& pCopy) {
-	a = pCopy.a;
-	b = pCopy.b;
-	parent = pCopy.parent;
-	childcount = pCopy.childcount;
-};
-
-treenode& treenode::operator=(const treenode& pCopy) {
-	a = pCopy.a;
-	b = pCopy.b;
-	parent = pCopy.parent;
-	childcount = pCopy.childcount;
-	return (*this);
-};
-
 /////////////////////////////////////////////////////////////////////
 // class for a slice
 /////////////////////////////////////////////////////////////////////
@@ -100,6 +30,29 @@ slice& slice::operator=(const slice& pCopy) {
 		p[i] = pCopy.p[i];
 	};
 	
+	return (*this);
+};
+
+/////////////////////////////////////////////////////////////////////
+// class for a triangle
+/////////////////////////////////////////////////////////////////////
+
+triangle::triangle() {
+	for (int i = 0; i < 3; i++) {
+		v[i] = 0;
+	};	
+};
+
+triangle::triangle(const triangle& pCopy) {
+	for (int i = 0; i < 3; i++) {
+		v[i] = pCopy.v[i];
+	};		
+};
+
+triangle& triangle::operator=(const triangle& pCopy) {
+	for (int i = 0; i < 3; i++) {
+		v[i] = pCopy.v[i];
+	};		
 	return (*this);
 };
 
@@ -148,6 +101,7 @@ treelogic::treelogic() {
 	mWireFrame = false;
 	mSimpleShader = NULL;
 	mTreeShader = NULL;
+	mLeafShader = NULL;
 	
 	// init our buffers
 	mVAO_APoints = 0;
@@ -155,18 +109,34 @@ treelogic::treelogic() {
 	
 	mUpdateBuffers = true;
 	mVAO_Tree = 0;
+	mVAO_Leaves = 0;
 	mVBO_Verts = 0;
-	mVBO_Elements = 0;
+	mVBO_TreeElements = 0;
+	mVBO_LeafElements = 0;
 	
 	// init our texture ID
-	mTextureID = 0;
+	mBarkTextID = 0;
+	mLeafTextID = 0;
+	
+	// tree generation info
+	mMinRadius = 0.4f;
+	mRadiusFactor = 1.0f / 400.0f;
+	mLeafSize.x = 20.0f;
+	mLeafSize.y = 30.0f;
 };
 
 treelogic::~treelogic() {
-	if (mTextureID != 0) {
-		glDeleteTextures(1, &mTextureID);
-		mTextureID = 0;
+	// free our textures
+	if (mLeafTextID != 0) {
+		glDeleteTextures(1, &mLeafTextID);
+		mLeafTextID = 0;
+	}
+	if (mBarkTextID != 0) {
+		glDeleteTextures(1, &mBarkTextID);
+		mBarkTextID = 0;
 	};
+	
+	// free our attraction point objects
 	if (mVAO_APoints != 0) {
 		glDeleteVertexArrays(1, &mVAO_APoints);
 		mVAO_APoints = 0;
@@ -176,18 +146,33 @@ treelogic::~treelogic() {
 		mVBO_APoints = 0;
 	};
 
+	// free our tree rendering objects
 	if (mVAO_Tree != 0) {
 		glDeleteVertexArrays(1, &mVAO_Tree);
 		mVAO_Tree = 0;
 	};
+	if (mVAO_Leaves != 0) {
+		glDeleteVertexArrays(1, &mVAO_Leaves);
+		mVAO_Leaves = 0;
+	}
 	if (mVBO_Verts != 0) {
 		glDeleteBuffers(1, &mVBO_Verts);
 		mVBO_Verts = 0;
 	};
-	if (mVBO_Elements != 0) {
-		glDeleteBuffers(1, &mVBO_Elements);
-		mVBO_Elements = 0;
-	}
+	if (mVBO_TreeElements != 0) {
+		glDeleteBuffers(1, &mVBO_TreeElements);
+		mVBO_TreeElements = 0;
+	};
+	if (mVBO_LeafElements != 0) {
+		glDeleteBuffers(1, &mVBO_LeafElements);
+		mVBO_LeafElements = 0;
+	};
+	
+	// free our shaders
+	if (mLeafShader != NULL) {
+		delete mLeafShader;
+		mLeafShader = NULL;
+	};
 	if (mTreeShader != NULL) {
 		delete mTreeShader;
 		mTreeShader = NULL;
@@ -208,6 +193,22 @@ bool treelogic::wireframe() {
 
 void treelogic::setWireframe(bool pWireframe) {
 	mWireFrame = pWireframe;
+};
+
+float treelogic::minRadius() {
+	return mMinRadius;
+};
+
+void treelogic::setMinRadius(float pRadius) {
+	mMinRadius = pRadius;
+};
+
+float treelogic::radiusFactor() {
+	return mRadiusFactor;
+};
+
+void treelogic::setRadiusFactor(float pFactor) {
+	mRadiusFactor = pFactor;
 };
 
 /////////////////////////////////////////////////////////////////////
@@ -263,9 +264,15 @@ void treelogic::remVertex(unsigned long pIndex) {
 	};
 	
 	// adjust our elements
-	for (unsigned long e = 0; e < mElements.size(); e++) {
+	for (unsigned long e = 0; e < mTreeElements.size(); e++) {
 		for (int i = 0; i < 4; i++) {
-			if (mElements[e].v[i] > pIndex) mElements[e].v[i]--;
+			if (mTreeElements[e].v[i] > pIndex) mTreeElements[e].v[i]--;
+		};
+	};
+
+	for (unsigned long e = 0; e < mLeafElements.size(); e++) {
+		for (int i = 0; i < 3; i++) {
+			if (mLeafElements[e].v[i] > pIndex) mLeafElements[e].v[i]--;
 		};
 	};
 	
@@ -583,39 +590,39 @@ void treelogic::optimiseNodes() {
  * This method creates a slice based on a center vertex and a direction vector
  *
  * pCenter		- the center of our slice
- * pDir			- direction of our plane
+ * pPlaneNormal	- normal of our plane
+ * pBitangent	- direction vector within the plane of our previous slice.
  * pSize		- size of our slice
  * pDistance	- distance "travelled" along our tree, we use this for texture coordinates
  *
  **/
-slice treelogic::createSlice(const vec3 pCenter, const vec3 pDir, float pSize, float pDistance) {
+slice treelogic::createSlice(vec3 pCenter, vec3 pPlaneNormal, vec3 pBitangent, float pSize, float pDistance) {
 	slice newSlice;
 	mat3  rotate;
 	float distFact = 50.0f;
 	
 	// create our vertices counter clockwise
-	rotate.rotate(-90.0f, pDir);
+	rotate.rotate(-90.0f, pPlaneNormal);
 	
-//	vec3 dir = vec3(-1.0, -1.0, -1.0);
-//	dir = dir.normalized();
-	
-	vec3 dir = vec3(1.0, 0.0, 0.0);
-	if ((dir % pDir) > 0.99) {
-		dir = vec3(1.0, 0.0, 0.3);
-		dir.normalized();
+	// just a safety in case our bitangent lies parallel to our normal
+	if ((pBitangent % pPlaneNormal) > 0.99) {
+		pBitangent = vec3(1.0, 0.0, 0.0);
+		pBitangent.normalized();
 	};
 	
-	// Cross product to create our initial plane
-	vec3 dirA = pDir * dir;
-	dirA = dirA.normalized();
-	vec3 dirB = rotate * dirA;
+	// we use the bitangent of the previous plane to calculate our tangent
+	// this lines up our starting vertex better
+	vec3 tangent = pPlaneNormal * pBitangent;
+	tangent = tangent.normalized();
 	
 	// now create our vertices
-	int p = addVertex(pCenter + (dirA * pSize));
-	mNormals[p] = dirA;
+	int p = addVertex(pCenter + (tangent * pSize));
+	mNormals[p] = tangent;
 	mTexCoords[p] = vec2(0, pDistance / distFact);
 	newSlice.p[0] = p;
 	
+	vec3 dirB = rotate * tangent;
+
 	p = addVertex(pCenter + (dirB * pSize));
 	mNormals[p] = dirB;
 	mTexCoords[p] = vec2(0.25, pDistance / distFact);
@@ -636,8 +643,8 @@ slice treelogic::createSlice(const vec3 pCenter, const vec3 pDir, float pSize, f
 	newSlice.p[3] = p;
 
 	// the last vertex is in the same location as the first but with different texture coords
-	p = addVertex(pCenter + (dirA * pSize));
-	mNormals[p] = dirA;
+	p = addVertex(pCenter + (tangent * pSize));
+	mNormals[p] = tangent;
 	mTexCoords[p] = vec2(1.0, pDistance / distFact);
 	newSlice.p[4] = p;
 	
@@ -657,7 +664,7 @@ void treelogic::capSlice(const slice& pSlice) {
 	newQuad.v[2] = pSlice.p[1];
 	newQuad.v[3] = pSlice.p[0];
 
-	mElements.push_back(newQuad);
+	mTreeElements.push_back(newQuad);
 
 	// make sure we update our buffers
 	mUpdateBuffers = true;
@@ -678,7 +685,7 @@ void treelogic::joinTwoSlices(const slice& pA, const slice& pB) {
 		newQuad.v[2] = pA.p[i+1];
 		newQuad.v[3] = pA.p[i];
 		
-		mElements.push_back(newQuad);
+		mTreeElements.push_back(newQuad);
 
 		// make sure we update our buffers
 		mUpdateBuffers = true;
@@ -702,12 +709,60 @@ void treelogic::joinMultiSlices(long pSliceCount, slice* pSlices) {
 			newQuad.v[2] = pSlices[0].p[i+1];
 			newQuad.v[3] = pSlices[0].p[i];
 		
-			mElements.push_back(newQuad);
+			mTreeElements.push_back(newQuad);
 
 			// make sure we update our buffers
 			mUpdateBuffers = true;
 		};		
 	};
+};
+
+/**
+ * addLeaves(pCenter, pDirection)
+ *
+ * adds our branch
+ **/
+void treelogic::addLeaves(vec3 pCenter, vec3 pTangent, vec3 pBiTangent) {
+	GLuint v[4];
+	
+	vec3 normal = pTangent * pBiTangent;
+	vec3 tangent = pTangent * mLeafSize.y * randf(0.8f,1.0f);
+	vec3 bitangent = pBiTangent * mLeafSize.x * randf(0.8f,1.0f);
+	vec3 vertex = pCenter;
+		
+	vertex -= bitangent * 0.5f;
+	v[0] = addVertex(vertex);
+	mNormals[v[0]] = normal;
+	mTexCoords[v[0]] = vec2(0.0f, 1.0f);
+
+	vertex += tangent;
+	v[1] = addVertex(vertex);
+	mNormals[v[1]] = normal;
+	mTexCoords[v[1]] = vec2(0.0f, 0.0f);
+
+	vertex += bitangent;
+	v[2] = addVertex(vertex);
+	mNormals[v[2]] = normal;
+	mTexCoords[v[2]] = vec2(1.0f, 0.0f);
+
+	vertex -= tangent;
+	v[3] = addVertex(vertex);
+	mNormals[v[3]] = normal;
+	mTexCoords[v[3]] = vec2(1.0f, 1.0f);
+	
+	triangle newTriangle;
+	
+	newTriangle.v[0] = v[0];
+	newTriangle.v[1] = v[1];
+	newTriangle.v[2] = v[2];
+	
+	mLeafElements.push_back(newTriangle);
+
+	newTriangle.v[0] = v[0];
+	newTriangle.v[1] = v[2];
+	newTriangle.v[2] = v[3];
+	
+	mLeafElements.push_back(newTriangle);
 };
 
 /** 
@@ -721,7 +776,7 @@ void treelogic::joinMultiSlices(long pSliceCount, slice* pSlices) {
  * pDistance	- distance "travelled" along our tree, we use this for texture coordinates
  *
  **/
-void treelogic::expandChildren(unsigned long pParentNode, const slice& pParentSlice, vec3 pOffset, float pDistance, float pMinR, float pFactor) {
+void treelogic::expandChildren(unsigned long pParentNode, const slice& pParentSlice, vec3 pOffset, float pDistance) {
 	// find out how many child nodes we have
 	std::vector<int> childNodes;
 	
@@ -735,24 +790,23 @@ void treelogic::expandChildren(unsigned long pParentNode, const slice& pParentSl
 		if (pParentNode == -1) {
 			// nothing???
 		} else {
-			// it ends here... 			
-			float	size		= mNodes[pParentNode].childcount;
-			size = (size / pFactor) + pMinR;
-			vec3	direction	= mVertices[mNodes[pParentNode].b] - mVertices[mNodes[pParentNode].a];
-			float	len			= direction.length();
-			direction /= len;
+			// cap our parent slice
+			capSlice(pParentSlice);
 
-			slice	childSlice	= createSlice(mVertices[mNodes[pParentNode].b] + pOffset, direction, size, pDistance);
-
-			// join final piece
-			joinTwoSlices(pParentSlice, childSlice);
-			capSlice(childSlice);
+			// and add our leaves
+			vec3	tangent	= mVertices[mNodes[pParentNode].b] - mVertices[mNodes[pParentNode].a];
+			tangent = tangent.normalized();
+			vec3	bitangent = tangent * mNormals[pParentSlice.p[0]];
+			bitangent = bitangent.normalized();
+			
+			addLeaves(mVertices[mNodes[pParentNode].a] + pOffset, tangent, bitangent);
+			addLeaves(mVertices[mNodes[pParentNode].a] + pOffset, tangent, bitangent * -1.0f);
 		};
 	} else if (childNodes.size() == 1) {
 		// we just need to create a slice at our root
 		int		node		= childNodes[0];
 		float	size		= mNodes[node].childcount;
-		size = (size / pFactor) + pMinR;
+		size = (size * mRadiusFactor) + mMinRadius;
 		vec3	direction	= mVertices[mNodes[node].b] - mVertices[mNodes[node].a];
 		float	len			= direction.length();
 		direction /= len;
@@ -762,31 +816,33 @@ void treelogic::expandChildren(unsigned long pParentNode, const slice& pParentSl
 			direction = direction.normalized();
 		};
 		
-//		syslog(LOG_ALERT, "Parent %i, Node %i, Size = %f", pParentNode, node, size);
-		
-		slice	childSlice	= createSlice(mVertices[mNodes[node].a] + pOffset, direction, size, pDistance);
+		vec3	bitangent = mNormals[pParentSlice.p[3]];
+		slice	childSlice	= createSlice(mVertices[mNodes[node].a] + pOffset, direction, bitangent, size, pDistance);
 
 		if (pParentNode != -1) {
 			// join parent to child
 			joinTwoSlices(pParentSlice, childSlice);
 		};
 
-		expandChildren(node, childSlice, pOffset, pDistance + len, pMinR, pFactor);		
+		expandChildren(node, childSlice, pOffset, pDistance + len);
 	} else {		
 		int		firstChild	= (pParentNode == -1 ? 0 : 1);
 		int		numSlices	= childNodes.size() + firstChild;
 		slice*	slices		= new slice[numSlices];
+		vec3	bitangent	= vec3(1.0f, 0.0f, 0.0f);
 		
 		if (pParentNode != -1) {
 			// draw our tree up to the point of our split
 			
 			float	size		= mNodes[pParentNode].childcount;
-			size = (size / pFactor) + pMinR;
+			size = (size * mRadiusFactor) + mMinRadius;
 			vec3	direction	= mVertices[mNodes[pParentNode].b] - mVertices[mNodes[pParentNode].a];
 			float	len			= direction.length();
 			direction /= len;
 
-			slices[0] = createSlice(mVertices[mNodes[pParentNode].b] + pOffset, direction, size, pDistance);
+			bitangent = mNormals[pParentSlice.p[3]];
+			slices[0] = createSlice(mVertices[mNodes[pParentNode].b] + pOffset, direction, bitangent, size, pDistance);
+			bitangent = mNormals[slices[0].p[3]];
 
 			// join final piece
 			joinTwoSlices(pParentSlice, slices[0]);
@@ -799,7 +855,7 @@ void treelogic::expandChildren(unsigned long pParentNode, const slice& pParentSl
 		for (int n = 0; n < childNodes.size(); n++) {
 			int		node		= childNodes[n];
 			float	size		= mNodes[node].childcount;
-			size = (size / pFactor) + pMinR;
+			size = (size * mRadiusFactor) + mMinRadius;
 			vec3	direction	= mVertices[mNodes[node].b] - mVertices[mNodes[node].a];
 			float	len			= direction.length();
 			direction /= len;
@@ -810,9 +866,9 @@ void treelogic::expandChildren(unsigned long pParentNode, const slice& pParentSl
 			};
 			vec3	offset		= direction * size;
 
-			slices[n + firstChild] = createSlice(mVertices[mNodes[node].a] + pOffset + offset, direction, size, pDistance + size);
+			slices[n + firstChild] = createSlice(mVertices[mNodes[node].a] + pOffset + offset, direction, bitangent, size, pDistance + size);
 
-			expandChildren(node, slices[n + firstChild], pOffset + offset, pDistance + size + len, pMinR, pFactor);		
+			expandChildren(node, slices[n + firstChild], pOffset + offset, pDistance + size + len);
 		};
 		
 		// now create joining piece
@@ -824,16 +880,16 @@ void treelogic::expandChildren(unsigned long pParentNode, const slice& pParentSl
 };
 
 /**
- * createMode()
+ * createModel()
  * 
  * This method will use our node tree to build a model of our tree
  *
  **/
-void treelogic::createModel(float pMinR, float pFactor) {
+void treelogic::createModel() {
 	unsigned long	vertCount	= mVertices.size(); // remember how many vertices we have right now so we can remove these later on...
 
 	slice emptySlize;
-	expandChildren(-1, emptySlize, vec3(0.0f, 0.0f, 0.0f), 0.0f, pMinR, pFactor);
+	expandChildren(-1, emptySlize, vec3(0.0f, 0.0f, 0.0f), 0.0f);
 	
 	// now remove our nodes and related vertices, we no longer need them...
 	for (unsigned long i = 0; i < vertCount; i++) {
@@ -859,26 +915,8 @@ void treelogic::createModel(float pMinR, float pFactor) {
 void treelogic::initShaders() {
 	makeSimpleShader();
 	makeTreeShader();
+	makeLeafShader();
 };
-
-char simpleVertexShader[] = "#version 330\r\n\
-\r\n\
-uniform mat4 mvp;\r\n\
-layout (location=0) in vec3	vertices;\r\n\
-\r\n\
-void main() {\r\n\
-  vec4 V = vec4(vertices, 1.0);\r\n\
-  gl_Position = mvp * V;\r\n\
-}";
-
-char simpleFragmentShader[] = "#version 330\r\n\
-\r\n\
-uniform vec4 color;\r\n\
-out vec4 fragcolor;\r\n\
-\r\n\
-void main() {\r\n\
-  fragcolor = color;\r\n\
-}";
 
 void treelogic::makeSimpleShader() {
 	if (mSimpleShader == NULL) {
@@ -887,239 +925,11 @@ void treelogic::makeSimpleShader() {
 		
 		syslog(LOG_NOTICE, "Creating simple shader");
 
-		mSimpleShader->addShader(GL_VERTEX_SHADER, simpleVertexShader);
-		mSimpleShader->addShader(GL_FRAGMENT_SHADER, simpleFragmentShader);
+		mSimpleShader->addShader(GL_VERTEX_SHADER, shader::loadShaderText("simpleshader.vs").c_str());
+		mSimpleShader->addShader(GL_FRAGMENT_SHADER, shader::loadShaderText("simpleshader.fs").c_str());
 		mSimpleShader->link();
 	};
 };
-
-char treeVertexShader[] = "#version 410 core\r\n\
-\r\n\
-layout (location=0) in vec3	vertices;\r\n\
-layout (location=1) in vec3	normals;\r\n\
-layout (location=2) in vec2	texcoords;\r\n\
-\r\n\
-uniform mat4 mvp;\r\n\
-\r\n\
-out VS_OUT {\r\n\
-  vec3 Vp;\r\n\
-  vec3 N;\r\n\
-  vec2 T;\r\n\
-} vs_out;\r\n\
-\r\n\
-void main() {\r\n\
-  vec4 V = vec4(vertices, 1.0);\r\n\
-  gl_Position = V;\r\n\
-  V = mvp * V;\r\n\
-  vs_out.Vp = V.xyz / V.w;\r\n\
-  vs_out.N = normals;\r\n\
-  vs_out.T = texcoords;\r\n\
-}";
-
-// using a Phong Tessellation technique for Quads as described here: http://liris.cnrs.fr/Documents/Liris-6161.pdf
-// Tessellation level is changed depending on our projected screen coordinates. 
-// At some point we should add a check that if the tree is further away it would be good to skip tesselation alltogether.
-
-char treeTessShader[] = "#version 410 core\r\n\
-\r\n\
-layout (vertices = 4) out;\r\n\
-\r\n\
-const float precission = 25.0;\r\n\
-const float maxTessGenLevel = 16;\r\n\
-in VS_OUT {\r\n\
-  vec3 Vp;\r\n\
-  vec3 N;\r\n\
-  vec2 T;\r\n\
-} ts_in[];\r\n\
-\r\n\
-out TS_OUT {\r\n\
-  vec3 N;\r\n\
-  vec2 T;\r\n\
-} ts_out[];\r\n\
-\r\n\
-void main() {\r\n\
-  if (gl_InvocationID == 0) {\r\n\
-    // get our screen coords\r\n\
-    vec3 V0 = ts_in[0].Vp;\r\n\
-    vec3 V1 = ts_in[1].Vp;\r\n\
-    vec3 V2 = ts_in[2].Vp;\r\n\
-    vec3 V3 = ts_in[3].Vp;\r\n\
-\r\n\
-    if ((V0.z <= 0.0) && (V1.z <= 0.0) && (V2.z <= 0.0) && (V3.z <= 0.0)) {\r\n\
-        // Behind the camera\r\n\
-        gl_TessLevelOuter[0] = 0;\r\n\
-        gl_TessLevelOuter[1] = 0;\r\n\
-        gl_TessLevelOuter[2] = 0;\r\n\
-        gl_TessLevelOuter[3] = 0;\r\n\
-        gl_TessLevelInner[0] = 0;\r\n\
-        gl_TessLevelInner[1] = 0;\r\n\
-	} else {\r\n\
-        float level0 = maxTessGenLevel;\r\n\
-        float level1 = maxTessGenLevel;\r\n\
-        float level2 = maxTessGenLevel;\r\n\
-        float level3 = maxTessGenLevel;\r\n\
-\r\n\
-        if ((V0.z>0.0) && (V2.z>0.0)) {\r\n\
-          level0 = min(maxTessGenLevel, max(length(V0.xy - V2.xy) * precission, 1.0));\r\n\
-        }\r\n\
-        if ((V0.z>0.0) && (V1.z>0.0)) {\r\n\
-          level1 = min(maxTessGenLevel, max(length(V0.xy - V1.xy) * precission, 1.0));\r\n\
-        }\r\n\
-        if ((V1.z>0.0) && (V1.z>0.0)) {\r\n\
-          level2 = min(maxTessGenLevel, max(length(V1.xy - V3.xy) * precission, 1.0));\r\n\
-        }\r\n\
-        if ((V3.z>0.0) && (V2.z>0.0)) {\r\n\
-          level3 = min(maxTessGenLevel, max(length(V3.xy - V2.xy) * precission, 1.0));\r\n\
-        }\r\n\
-\r\n\
-	    gl_TessLevelOuter[0] = level0;\r\n\
-	    gl_TessLevelOuter[1] = level1;\r\n\
-	    gl_TessLevelOuter[2] = level2;\r\n\
-	    gl_TessLevelOuter[3] = level3;\r\n\
-	    gl_TessLevelInner[0] = min(level1, level3);\r\n\
-	    gl_TessLevelInner[1] = min(level0, level2);\r\n\
-	}\r\n\
-  }\r\n\
-\r\n\
-  // just copy our vertices as control points\r\n\
-  gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;\r\n\
-  ts_out[gl_InvocationID].N = ts_in[gl_InvocationID].N;\r\n\
-  ts_out[gl_InvocationID].T = ts_in[gl_InvocationID].T;\r\n\
-}";
-
-char treeEvalShader[] = "#version 410 core\r\n\
-\r\n\
-layout (quads, fractional_even_spacing, cw) in;\r\n\
-\r\n\
-uniform mat4 mvp;\r\n\
-\r\n\
-in TS_OUT {\r\n\
-  vec3 N;\r\n\
-  vec2 T;\r\n\
-} te_in[];\r\n\
-\r\n\
-out TE_OUT {\r\n\
-  vec3 tangent;\r\n\
-  vec3 bitangent;\r\n\
-  vec2 T;\r\n\
-} te_out;\r\n\
-\r\n\
-// q (interpolated position)\r\n\
-vec3 pt_q(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float u, float v) {\r\n\
-  return (1.0 - u) * (1.0 - v) * p0 + u * (1.0 - v) * p1 + (1.0 - u) * v * p3 + u * v * p2;\r\n\
-}\r\n\
-\r\n\
-// interpolated normal (same as interpolated position)\r\n\
-vec3 pt_n(vec3 n0, vec3 n1, vec3 n2, vec3 n3, float u, float v) {\r\n\
-  return pt_q(n0, n1, n2, n3, u, v);\r\n\
-}\r\n\
-\r\n\
-// dq / dv\r\n\
-vec3 pt_dqdu(vec3 p0,vec3 p1, vec3 p2, vec3 p3, float v) {\r\n\
-  return (v - 1.0) * p0 + (1.0 - v) * p1 - v * p3 + v * p2;\r\n\
-}\r\n\
-\r\n\
-// dq / dv\r\n\
-vec3 pt_dqdv(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float u) {\r\n\
-  return (u - 1.0) * p0 - u * p1 + (1.0 - u) * p3 + u * p2;\r\n\
-}\r\n\
-\r\n\
-// pi (projection operator)\r\n\
-vec3 pt_pi(vec3 q, vec3 p, vec3 n) {\r\n\
-  return q - dot(q - p, n) * n;\r\n\
-}\r\n\
-\r\n\
-// dpi / du (gradient of the projection operator with respect to u)\r\n\
-vec3 pt_dpidu(vec3 dqdu, vec3 p, vec3 n) {\r\n\
-  vec3 gradx = vec3 (1.0 - n.x * n.x, -n.y * n.x, -n.z * n.x);\r\n\
-  vec3 grady = vec3(-n.x * n.y, 1.0 - n.y * n.y, -n.z * n.y);\r\n\
-  vec3 gradz = vec3(-n.x * n.z , -n.y * n.z, 1.0 - n.z * n.z);\r\n\
-  return mat3 (gradx, grady, gradz) * dqdu;\r\n\
-}\r\n\
-\r\n\
-// dpi / dv (gradient of the projection operator with respect to v)\r\n\
-vec3 pt_dpidv(vec3 dqdv, vec3 p, vec3 n) {\r\n\
-  vec3 gradx = vec3(1.0 - n.x * n.x, -n.y * n.x, -n.z * n.x);\r\n\
-  vec3 grady = vec3(-n.x * n.y, 1.0 - n.y * n.y, -n.z * n.y);\r\n\
-  vec3 gradz = vec3(-n.x * n.z, -n.y * n.z , 1.0 - n.z * n.z);\r\n\
-  return mat3 (gradx, grady, gradz) * dqdv;\r\n\
-}\r\n\
-\r\n\
-void main() {\r\n\
-  // barycentric coordinates\r\n\
-  float u = gl_TessCoord.x;\r\n\
-  float v = gl_TessCoord.y;\r\n\
-\r\n\
-  // patch vertices\r\n\
-  vec3 p0 = gl_in[0].gl_Position.xyz;\r\n\
-  vec3 p1 = gl_in[1].gl_Position.xyz;\r\n\
-  vec3 p2 = gl_in[2].gl_Position.xyz;\r\n\
-  vec3 p3 = gl_in[3].gl_Position.xyz;\r\n\
-\r\n\
-  // patch normals\r\n\
-  vec3 n0 = te_in[0].N;\r\n\
-  vec3 n1 = te_in[1].N;\r\n\
-  vec3 n2 = te_in[2].N;\r\n\
-  vec3 n3 = te_in[3].N;\r\n\
-\r\n\
-  // get interpolated position\r\n\
-  vec3 q = pt_q(p0 ,p1 ,p2 ,p3, u, v);\r\n\
-\r\n\
-  // smooth surface position\r\n\
-  vec3 p = (1.0 - u) * (1.0 - v) * pt_pi(q, p0, n0)\r\n\
-         + u * (1.0 - v) * pt_pi(q, p1, n1)\r\n\
-         + (1.0 - u) * v * pt_pi(q, p3, n3)\r\n\
-         + u * v * pt_pi(q, p2, n2);\r\n\
-\r\n\
-  // smooth surface tangent\r\n\
-  vec3 dqdu = pt_dqdu(p0, p1, p2, p3, v);\r\n\
-  vec3 t = (v - 1.0) * pt_pi(q, p0, n0) + (1.0 - u) * (1.0 - v) * pt_dpidu(dqdu, p0, n0)\r\n\
-         + (1.0 - v) * pt_pi(q, p1, n1) + u * (1.0 - v) * pt_dpidu(dqdu, p1, n1)\r\n\
-         - v * pt_pi(q, p3, n3) + v * (1.0 - u) * pt_dpidu(dqdu, p3, n3)\r\n\
-         + v * pt_pi(q, p2, n2) + u * v * pt_dpidu(dqdu, p2, n2);\r\n\
-\r\n\
-  // smooth surface bitangent\r\n\
-  vec3 dqdv = pt_dqdv(p0, p1, p2, p3, u);\r\n\
-  vec3 b = (u - 1.0) * pt_pi(q, p0, n0) + (1.0 - u) * (1.0 - v) * pt_dpidv(dqdv, p0, n0)\r\n\
-         - u * pt_pi(q, p1, n1) + u * (1.0 - v) * pt_dpidv(dqdv, p1, n1)\r\n\
-         + (1.0 - u) * pt_pi(q, p3, n3) + v * (1.0 - u) * pt_dpidv(dqdv, p3, n3)\r\n\
-         + u * pt_pi(q, p2, n2) + u * v * pt_dpidv(dqdv, p2, n2);\r\n\
-\r\n\
-  // set varyings\r\n\
-  te_out.tangent = normalize(t);\r\n\
-  te_out.bitangent = normalize(b);\r\n\
-\r\n\
-  // project vertex\r\n\
-  gl_Position = mvp * vec4(p, 1.0);\r\n\
-\r\n\
-  // Simply interpolate our texture coord\r\n\
-  vec2 T1 = mix(te_in[0].T, te_in[1].T, gl_TessCoord.x);\r\n\
-  vec2 T2 = mix(te_in[2].T, te_in[3].T, 1.0 - gl_TessCoord.x);\r\n\
-  te_out.T = mix(T1, T2, gl_TessCoord.y);\r\n\
-}";
-  
-char treeFragmentShader[] = "#version 410 core\r\n\
-\r\n\
-uniform mat3 normalMat;\r\n\
-uniform sampler2D treeTexture;\r\n\
-\r\n\
-in TE_OUT {\r\n\
-  vec3 tangent;\r\n\
-  vec3 bitangent;\r\n\
-  vec2 T;\r\n\
-} fs_in;\r\n\
-\r\n\
-out vec4 fragcolor;\r\n\
-\r\n\
-void main() {\r\n\
-  vec4 color = texture(treeTexture, fs_in.T);\r\n\
-\r\n\
-  vec3 L = normalize(vec3(1.0, 1.0, 1.0));\r\n\
-  vec3 N = normalMat * cross(-normalize(fs_in.tangent), normalize(fs_in.bitangent));\r\n\
-  float dot = 0.4 + (max(0.0, dot(L, N)) * 0.6);\r\n\
-\r\n\
-  fragcolor = color * dot;\r\n\
-}";
 
 void treelogic::makeTreeShader() {
 	if (mTreeShader == NULL) {
@@ -1128,13 +938,27 @@ void treelogic::makeTreeShader() {
 		
 		syslog(LOG_NOTICE, "Creating tree shader");
 
-		mTreeShader->addShader(GL_VERTEX_SHADER, treeVertexShader);
-		mTreeShader->addShader(GL_TESS_CONTROL_SHADER, treeTessShader);
-		mTreeShader->addShader(GL_TESS_EVALUATION_SHADER, treeEvalShader);
-		mTreeShader->addShader(GL_FRAGMENT_SHADER, treeFragmentShader);
+		mTreeShader->addShader(GL_VERTEX_SHADER, shader::loadShaderText("treeshader.vs").c_str());
+		mTreeShader->addShader(GL_TESS_CONTROL_SHADER, shader::loadShaderText("treeshader.ts").c_str());
+		mTreeShader->addShader(GL_TESS_EVALUATION_SHADER, shader::loadShaderText("treeshader.te").c_str());
+		mTreeShader->addShader(GL_FRAGMENT_SHADER, shader::loadShaderText("treeshader.fs").c_str());
 		mTreeShader->link();
 	};
 };
+
+void treelogic::makeLeafShader() {
+	if (mLeafShader == NULL) {
+		// create a new shader
+		mLeafShader = new shader();
+		
+		syslog(LOG_NOTICE, "Creating leaf shader");
+
+		mLeafShader->addShader(GL_VERTEX_SHADER, shader::loadShaderText("leafshader.vs").c_str());
+		mLeafShader->addShader(GL_FRAGMENT_SHADER, shader::loadShaderText("leafshader.fs").c_str());
+		mLeafShader->link();
+	};
+};
+
 /////////////////////////////////////////////////////////////////////
 // rendering
 /////////////////////////////////////////////////////////////////////
@@ -1147,6 +971,7 @@ void treelogic::makeTreeShader() {
  **/
 void treelogic::render() {
 	unsigned long i;
+	unsigned long numOfVerts = mVertices.size();
 	
 	// OpenGL 3 requires us to have a vertex array buffer and store our data in vertex buffers. 
 	// These allow you to bind and set your buffers once and just enable the vertex array buffer to select them.
@@ -1164,9 +989,7 @@ void treelogic::render() {
 	glBindVertexArray(mVAO_Tree);
 	
 	// now load our buffers if we must
-	if (mUpdateBuffers && (mVertices.size() > 0)) {
-		unsigned long numOfVerts = mVertices.size();
-		
+	if (mUpdateBuffers && (numOfVerts > 0)) {		
 		// create a buffer for our vertices
 		if (mVBO_Verts == 0) {
 			// create our buffer
@@ -1195,15 +1018,15 @@ void treelogic::render() {
 		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(vec2), (GLvoid *) (2 * sizeof(vec3) * numOfVerts));
 		
 		// and setup our elements buffer
-		if (mVBO_Elements == 0) {
+		if (mVBO_TreeElements == 0) {
 			// create our buffer
-			glGenBuffers(1, &mVBO_Elements);
+			glGenBuffers(1, &mVBO_TreeElements);
 		};
 		
 		// bind our buffer
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mVBO_Elements);	
-		if (mElements.size() > 0) {
-			glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint) * 4 * mElements.size(), mElements.data(), GL_STATIC_DRAW);			
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mVBO_TreeElements);	
+		if (mTreeElements.size() > 0) {
+			glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint) * 4 * mTreeElements.size(), mTreeElements.data(), GL_STATIC_DRAW);			
 		} else if (mNodes.size() > 0) {
 			// Our nodes contain way to much data, but this time we'll need to copy
 			unsigned long numOfNodes = mNodes.size();
@@ -1223,39 +1046,26 @@ void treelogic::render() {
 	};
 	
 	// if we have our elements, start there..
-	if (mElements.size() > 0) {
+	if (mTreeElements.size() > 0) {
 		glEnable(GL_DEPTH_TEST);
 		glEnable(GL_CULL_FACE);
 		glCullFace(GL_BACK);
+
+		// wireframe
+		if (mWireFrame) {
+			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);			
+		} else {
+			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);			
+		};
 		
 		// setup our texture
 		glActiveTexture(GL_TEXTURE0);
 		
-		if (mTextureID == 0) {
-			// create our texture
-			glGenTextures(1, &mTextureID);
-			
-			// bind our texture
-			glBindTexture(GL_TEXTURE_2D, mTextureID);
-			
-			// load our texture
-			int width, height, channels;
-			unsigned char* image = stbi_load("tree.jpg", &width, &height, &channels, STBI_rgb);
-			
-			if(channels == 3) {
-			    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, image);	
-			} else if(channels == 4) {
-			    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);				
-			};
-			
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-			
-			stbi_image_free(image);
-			
+		if (mBarkTextID == 0) {
+			mBarkTextID = shader::loadTexture("tree.jpg");
 		} else {
 			// bind our texture
-			glBindTexture(GL_TEXTURE_2D, mTextureID);			
+			glBindTexture(GL_TEXTURE_2D, mBarkTextID);			
 		};
 		
 		// use our tree shader program
@@ -1266,16 +1076,60 @@ void treelogic::render() {
 		mTreeShader->setMat4Uniform(mTreeShader->uniform("mvp"), mProjection * mView * mModel);
 		mTreeShader->setMat3Uniform(mTreeShader->uniform("normalMat"), mModel.mat3x3());
 
-		// wireframe
-		if (mWireFrame) {
-			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);			
-		} else {
-			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);			
-		};
-
 		// in OpenGL we render these as patches and it goes through our tesselation shader
 		glPatchParameteri(GL_PATCH_VERTICES, 4);
-		glDrawElements(GL_PATCHES, mElements.size() * 4, GL_UNSIGNED_INT, 0);
+		glDrawElements(GL_PATCHES, mTreeElements.size() * 4, GL_UNSIGNED_INT, 0);
+		
+		/* now its time for our leaves */
+		if (mLeafElements.size() > 0) {
+			// create our VAO
+			if (mVAO_Leaves ==0) {
+				glGenVertexArrays(1, &mVAO_Leaves);
+			};
+			
+			// now bind it
+			glBindVertexArray(mVAO_Leaves);
+			
+			// create and load our buffers if we must
+			if (mVBO_LeafElements == 0) {
+				// our vertex buffer is loaded and should be unchanged or we wouldn't be here, reuse it..
+				glBindBuffer(GL_ARRAY_BUFFER, mVBO_Verts);
+				glEnableVertexAttribArray(0);
+				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vec3), (GLvoid *) 0);
+				glEnableVertexAttribArray(1);
+				glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(vec3), (GLvoid *) (sizeof(vec3) * numOfVerts));
+				glEnableVertexAttribArray(2);
+				glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(vec2), (GLvoid *) (2 * sizeof(vec3) * numOfVerts));
+				
+				// create our VBO for our leaf elements
+				glGenBuffers(1, &mVBO_LeafElements);
+				
+				// bind it
+				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mVBO_LeafElements);	
+				
+				// and load our data
+				glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint) * 3 * mLeafElements.size(), mLeafElements.data(), GL_STATIC_DRAW);			
+			};
+
+			// setup our texture, texture 0 should still be the active texture
+			if (mLeafTextID == 0) {
+				mLeafTextID = shader::loadTexture("leaves_1.png");
+			} else {
+				// bind our texture
+				glBindTexture(GL_TEXTURE_2D, mLeafTextID);			
+			};
+			
+			// setup our leaf shader
+			glUseProgram(mLeafShader->shaderProgram());
+		
+			// set our projection/model/view matrix
+			mLeafShader->setIntUniform(mLeafShader->uniform("leafTexture"), 0);
+			mLeafShader->setMat4Uniform(mLeafShader->uniform("mvp"), mProjection * mView * mModel);
+			mLeafShader->setMat3Uniform(mLeafShader->uniform("normalMat"), mModel.mat3x3());
+			
+			// and draw...
+			glDrawElements(GL_TRIANGLES, mLeafElements.size() * 3, GL_UNSIGNED_INT, 0);
+		};
 		
 		// back to normal..
 		if (mWireFrame) {

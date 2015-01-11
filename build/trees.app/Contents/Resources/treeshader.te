@@ -1,0 +1,112 @@
+// using a Phong Tessellation technique for Quads as described here: http://liris.cnrs.fr/Documents/Liris-6161.pdf
+
+#version 410 core
+
+layout (quads, fractional_even_spacing, cw) in;
+
+uniform mat4 mvp;
+
+in TS_OUT {
+	vec3 N;
+	vec2 T;
+} te_in[];
+
+out TE_OUT {
+	vec3 tangent;
+	vec3 bitangent;
+	vec2 T;
+} te_out;
+
+// q (interpolated position)
+vec3 pt_q(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float u, float v) {
+	return (1.0 - u) * (1.0 - v) * p0 + u * (1.0 - v) * p1 + (1.0 - u) * v * p3 + u * v * p2;
+}
+
+// interpolated normal (same as interpolated position)
+vec3 pt_n(vec3 n0, vec3 n1, vec3 n2, vec3 n3, float u, float v) {
+	return pt_q(n0, n1, n2, n3, u, v);
+}
+
+// dq / dv
+vec3 pt_dqdu(vec3 p0,vec3 p1, vec3 p2, vec3 p3, float v) {
+	return (v - 1.0) * p0 + (1.0 - v) * p1 - v * p3 + v * p2;
+}
+
+// dq / dv
+vec3 pt_dqdv(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float u) {
+	return (u - 1.0) * p0 - u * p1 + (1.0 - u) * p3 + u * p2;
+}
+
+// pi (projection operator)
+vec3 pt_pi(vec3 q, vec3 p, vec3 n) {
+	return q - dot(q - p, n) * n;
+}
+
+// dpi / du (gradient of the projection operator with respect to u)
+vec3 pt_dpidu(vec3 dqdu, vec3 p, vec3 n) {
+	vec3 gradx = vec3 (1.0 - n.x * n.x, -n.y * n.x, -n.z * n.x);
+	vec3 grady = vec3(-n.x * n.y, 1.0 - n.y * n.y, -n.z * n.y);
+	vec3 gradz = vec3(-n.x * n.z , -n.y * n.z, 1.0 - n.z * n.z);
+	return mat3 (gradx, grady, gradz) * dqdu;
+}
+
+// dpi / dv (gradient of the projection operator with respect to v)
+vec3 pt_dpidv(vec3 dqdv, vec3 p, vec3 n) {
+	vec3 gradx = vec3(1.0 - n.x * n.x, -n.y * n.x, -n.z * n.x);
+	vec3 grady = vec3(-n.x * n.y, 1.0 - n.y * n.y, -n.z * n.y);
+	vec3 gradz = vec3(-n.x * n.z, -n.y * n.z , 1.0 - n.z * n.z);
+	return mat3 (gradx, grady, gradz) * dqdv;
+}
+
+void main() {
+	// barycentric coordinates
+	float u = gl_TessCoord.x;
+	float v = gl_TessCoord.y;
+
+	// patch vertices
+	vec3 p0 = gl_in[0].gl_Position.xyz;
+	vec3 p1 = gl_in[1].gl_Position.xyz;
+	vec3 p2 = gl_in[2].gl_Position.xyz;
+	vec3 p3 = gl_in[3].gl_Position.xyz;
+
+	// patch normals
+	vec3 n0 = te_in[0].N;
+	vec3 n1 = te_in[1].N;
+	vec3 n2 = te_in[2].N;
+	vec3 n3 = te_in[3].N;
+
+	// get interpolated position
+	vec3 q = pt_q(p0 ,p1 ,p2 ,p3, u, v);
+
+	// smooth surface position
+	vec3 p = (1.0 - u) * (1.0 - v) * pt_pi(q, p0, n0)
+				 + u * (1.0 - v) * pt_pi(q, p1, n1)
+				 + (1.0 - u) * v * pt_pi(q, p3, n3)
+				 + u * v * pt_pi(q, p2, n2);
+
+	// smooth surface tangent
+	vec3 dqdu = pt_dqdu(p0, p1, p2, p3, v);
+	vec3 t = (v - 1.0) * pt_pi(q, p0, n0) + (1.0 - u) * (1.0 - v) * pt_dpidu(dqdu, p0, n0)
+				 + (1.0 - v) * pt_pi(q, p1, n1) + u * (1.0 - v) * pt_dpidu(dqdu, p1, n1)
+				 - v * pt_pi(q, p3, n3) + v * (1.0 - u) * pt_dpidu(dqdu, p3, n3)
+				 + v * pt_pi(q, p2, n2) + u * v * pt_dpidu(dqdu, p2, n2);
+
+	// smooth surface bitangent
+	vec3 dqdv = pt_dqdv(p0, p1, p2, p3, u);
+	vec3 b = (u - 1.0) * pt_pi(q, p0, n0) + (1.0 - u) * (1.0 - v) * pt_dpidv(dqdv, p0, n0)
+				 - u * pt_pi(q, p1, n1) + u * (1.0 - v) * pt_dpidv(dqdv, p1, n1)
+				 + (1.0 - u) * pt_pi(q, p3, n3) + v * (1.0 - u) * pt_dpidv(dqdv, p3, n3)
+				 + u * pt_pi(q, p2, n2) + u * v * pt_dpidv(dqdv, p2, n2);
+
+	// set varyings
+	te_out.tangent = normalize(t);
+	te_out.bitangent = normalize(b);
+
+	// project vertex
+	gl_Position = mvp * vec4(p, 1.0);
+
+	// Simply interpolate our texture coord
+	vec2 T1 = mix(te_in[0].T, te_in[1].T, gl_TessCoord.x);
+	vec2 T2 = mix(te_in[2].T, te_in[3].T, 1.0 - gl_TessCoord.x);
+	te_out.T = mix(T1, T2, gl_TessCoord.y);
+}

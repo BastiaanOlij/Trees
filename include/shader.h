@@ -7,12 +7,14 @@
 #ifndef shaderh
 #define shaderh
 
-#define		GLFW_INCLUDE_GL_3
+#define  GLFW_INCLUDE_GL_3
 #include <GLEW/glew.h>
 #include <GLFW/glfw3.h>
 
 #include <string>
 #include <vector>
+#include <fstream>
+#include <iostream>
 
 #ifdef __APPLE__
 #include <syslog.h>
@@ -52,6 +54,10 @@ public:
 	// interface
 	bool addShader(GLenum pShaderType, const GLchar * pText);
 	bool link();
+
+	// helpers
+	static std::string loadShaderText(const char *pFileName);
+	static GLuint loadTexture(const char *pFileName);
 };
 
 #endif

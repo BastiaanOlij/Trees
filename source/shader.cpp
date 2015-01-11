@@ -6,6 +6,9 @@
 
 #include "shader.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "STB/stb_image.h"
+
 /////////////////////////////////////////////////////////////////////
 // constructors/destructors
 /////////////////////////////////////////////////////////////////////
@@ -299,4 +302,66 @@ bool shader::link() {
 	freeShaders();
 	
 	return linked;
+};
+
+/////////////////////////////////////////////////////////////////////
+// helper
+/////////////////////////////////////////////////////////////////////
+
+/**
+ * loadShader(pFileName)
+ *
+ * Loads a text file (assumed shader) and returns this as a string.
+ * Note that we assume, as is the default with GLFW, that our path 
+ * is correctly set to our resources folder
+ **/
+std::string shader::loadShaderText(const char *pFileName) {
+	std::string program;
+	std::ifstream file(pFileName);
+	
+	if (file.is_open()) {
+		file.seekg(0, std::ios::end);   
+		program.reserve(file.tellg());
+		file.seekg(0, std::ios::beg);
+
+		program.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+	
+		file.close();
+	};
+
+	return program;
+};
+
+/**
+ * loadTexture(pFilename)
+ *
+ * Loads a texture into an OpenGL texture object, note that this texture will be bound to GL_TEXTURE_2D
+ **/
+GLuint shader::loadTexture(const char *pFileName) {
+	GLuint texture = 0;
+	
+	// create our textures
+	glGenTextures(1, &texture);
+	
+	// bind our texture
+	glBindTexture(GL_TEXTURE_2D, texture);
+	
+	// load our texture
+	int width, height, channels;
+	unsigned char* image = stbi_load(pFileName, &width, &height, &channels, STBI_rgb);
+	
+	syslog(LOG_ALERT, "Loaded %s, size = %i, %i, channels = %i ", pFileName, width, height, STBI_rgb_alpha);
+	
+	if(channels == 3) {
+	    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, image);	
+	} else if(channels == 4) {
+	    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);				
+	};
+	
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	
+	stbi_image_free(image);	
+	
+	return texture;
 };
